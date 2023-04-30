@@ -12,7 +12,7 @@ TEST_BASE_DIR = os.path.join(ROOT_DIR, "Lib/test")
 TMP_LIB_DIR = os.path.join("/tmp/pycompiled")
 
 
-def run_test(test_file_or_folder) -> None:
+def run_test(test_file_or_folder: str) -> None:
     with contextlib.chdir(TMP_LIB_DIR):
         test_relative_path = f"compiled_tests/{test_file_or_folder}"
         file_command = ["python", "-m" "unittest", test_relative_path]
@@ -28,16 +28,14 @@ def run_test(test_file_or_folder) -> None:
         )
 
 
-def _run_command(_) -> None:
-    ...
+def run_mypy(library_name: str) -> None:
+    with contextlib.chdir(TMP_LIB_DIR):
+        subprocess.run(["mypy", "--strict", library_name])
 
 
-def run_mypy() -> None:
-    _run_command("mypy")
-
-
-def run_mypyc() -> None:
-    _run_command("mypyc")
+def run_mypyc(library_name: str) -> None:
+    with contextlib.chdir(TMP_LIB_DIR):
+        subprocess.run(["mypyc", "--strict", library_name])
 
 
 def main() -> int:
@@ -106,9 +104,9 @@ def main() -> int:
         if args.subcommand == "test":
             run_test(test_file_or_folder)
         elif args.subcommand == "mypy":
-            run_mypy()
+            run_mypy(library_name)
         elif args.subcommand == "mypyc":
-            run_mypyc()
+            run_mypyc(library_name)
 
     finally:
         shutil.rmtree(TMP_LIB_DIR)
