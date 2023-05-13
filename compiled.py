@@ -4,6 +4,7 @@ import contextlib
 import os
 import shutil
 import subprocess
+from typing import Literal
 
 
 ROOT_DIR = os.path.normpath(os.path.dirname(__file__))
@@ -35,7 +36,20 @@ def run_mypy(library_name: str) -> None:
 
 def run_mypyc(library_name: str) -> None:
     with contextlib.chdir(TMP_LIB_DIR):
-        subprocess.run(["mypyc", "--strict", library_name])
+        subprocess.run(["mypyc", library_name])
+
+
+def delete_python_files_and_pycache(library_name: str) -> None:
+    library_path = os.path.join(TMP_LIB_DIR, library_name)
+    shutil.rmtree(os.path.join(library_path, "__pycache__"), ignore_errors=True)
+    for file in os.listdir(library_path):
+        if file.endswith(".py"):
+            os.remove(os.path.join(library_path, file))
+
+
+class CompiledNamespace:
+    subcommand: Literal["test", "mypy", "mypyc", "test_compiled"]
+    library: str
 
 
 def main() -> int:
@@ -51,7 +65,10 @@ def main() -> int:
     mypyc_parser = subparsers.add_parser("mypyc")
     mypyc_parser.add_argument("library")
 
-    args = parser.parse_args()
+    test_compiled_parser = subparsers.add_parser("test_compiled")
+    test_compiled_parser.add_argument("library")
+
+    args = parser.parse_args(namespace=CompiledNamespace)
     library_name = args.library
 
     library_path = os.path.join(LIB_BASE_DIR, library_name)
@@ -107,6 +124,10 @@ def main() -> int:
             run_mypy(library_name)
         elif args.subcommand == "mypyc":
             run_mypyc(library_name)
+        elif args.subcommand == "test_compiled":
+            run_mypyc(library_name)
+            delete_python_files_and_pycache(library_name)
+            run_test(test_file_or_folder)
 
     finally:
         shutil.rmtree(TMP_LIB_DIR)
