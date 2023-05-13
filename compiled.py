@@ -36,7 +36,7 @@ def run_mypy(library_name: str) -> None:
 
 def run_mypyc(library_name: str) -> None:
     with contextlib.chdir(TMP_LIB_DIR):
-        subprocess.run(["mypyc", library_name])
+        subprocess.run(["mypyc", "--strict", library_name])
 
 
 def delete_python_files_and_pycache(library_name: str) -> None:
