@@ -13,7 +13,7 @@ TEST_BASE_DIR = os.path.join(ROOT_DIR, "Lib/test")
 TMP_LIB_DIR = os.path.join("/tmp/pycompiled")
 
 
-def run_test(test_file_or_folder: str) -> None:
+def run_test(test_file_or_folder: str) -> int:
     with contextlib.chdir(TMP_LIB_DIR):
         test_relative_path = f"compiled_tests/{test_file_or_folder}"
         file_command = ["python", "-m" "unittest", test_relative_path]
@@ -24,19 +24,22 @@ def run_test(test_file_or_folder: str) -> None:
             "-s",
             test_relative_path,
         ]
-        subprocess.run(
+        process = subprocess.run(
             folder_command if os.path.isdir(test_relative_path) else file_command
         )
+        return process.returncode
 
 
-def run_mypy(library_name: str) -> None:
+def run_mypy(library_name: str) -> int:
     with contextlib.chdir(TMP_LIB_DIR):
-        subprocess.run(["mypy", "--strict", library_name])
+        process = subprocess.run(["mypy", "--strict", library_name])
+        return process.returncode
 
 
-def run_mypyc(library_name: str) -> None:
+def run_mypyc(library_name: str) -> int:
     with contextlib.chdir(TMP_LIB_DIR):
-        subprocess.run(["mypyc", "--strict", library_name])
+        process = subprocess.run(["mypyc", "--strict", library_name])
+        return process.returncode
 
 
 def delete_python_files_and_pycache(library_name: str) -> None:
@@ -119,20 +122,26 @@ def main() -> int:
                     f.write(contents.replace("from . import", "import"))
 
         if args.subcommand == "test":
-            run_test(test_file_or_folder)
-        elif args.subcommand == "mypy":
-            run_mypy(library_name)
-        elif args.subcommand == "mypyc":
-            run_mypyc(library_name)
-        elif args.subcommand == "test_compiled":
-            run_mypyc(library_name)
+            return run_test(test_file_or_folder)
+
+        if args.subcommand == "mypy":
+            return run_mypy(library_name)
+
+        if args.subcommand == "mypyc":
+            return run_mypyc(library_name)
+
+        if args.subcommand == "test_compiled":
+            returncode = run_mypyc(library_name)
+            if returncode != 0:
+                return returncode
+
             delete_python_files_and_pycache(library_name)
-            run_test(test_file_or_folder)
+            return run_test(test_file_or_folder)
 
     finally:
         shutil.rmtree(TMP_LIB_DIR)
 
-    return 0
+    raise AssertionError("unreachable")
 
 
 if __name__ == "__main__":
