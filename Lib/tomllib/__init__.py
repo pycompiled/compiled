@@ -4,7 +4,8 @@
 
 __all__ = ("loads", "load", "TOMLDecodeError")
 
-from ._parser import TOMLDecodeError, load, loads
+from ._parser import load, loads
 
-# Pretend this exception was created here.
-TOMLDecodeError.__module__ = __name__
+
+class TOMLDecodeError(ValueError):
+    """An error raised if a document is not valid TOML."""

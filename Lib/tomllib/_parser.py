@@ -7,7 +7,18 @@ from __future__ import annotations
 from collections.abc import Iterable
 import string
 from types import MappingProxyType
-from typing import Any, BinaryIO, NamedTuple
+from typing import (
+    Any,
+    BinaryIO,
+    ClassVar,
+    NamedTuple,
+    TypeAlias,
+    TypedDict,
+    TYPE_CHECKING,
+)
+
+if TYPE_CHECKING:
+    from . import TOMLDecodeError
 
 from ._re import (
     RE_DATETIME,
@@ -50,10 +61,6 @@ BASIC_STR_ESCAPE_REPLACEMENTS = MappingProxyType(
 )
 
 
-class TOMLDecodeError(ValueError):
-    """An error raised if a document is not valid TOML."""
-
-
 def load(fp: BinaryIO, /, *, parse_float: ParseFloat = float) -> dict[str, Any]:
     """Parse TOML from a binary file object."""
     b = fp.read()
@@ -66,7 +73,7 @@ def load(fp: BinaryIO, /, *, parse_float: ParseFloat = float) -> dict[str, Any]:
     return loads(s, parse_float=parse_float)
 
 
-def loads(s: str, /, *, parse_float: ParseFloat = float) -> dict[str, Any]:  # noqa: C901
+def loads(s: str, /, *, parse_float: ParseFloat = float) -> dict[str, Any]:
     """Parse TOML from a string."""
 
     # The spec allows converting "\r\n" to "\n", even in string
@@ -132,17 +139,26 @@ def loads(s: str, /, *, parse_float: ParseFloat = float) -> dict[str, Any]:  # n
     return out.data.dict
 
 
+_Flags: TypeAlias = dict[str, "_FlagKeys"]
+
+
+class _FlagKeys(TypedDict):
+    flags: set[int]
+    recursive_flags: set[int]
+    nested: _Flags
+
+
 class Flags:
     """Flags that map to parsed keys/namespaces."""
 
     # Marks an immutable namespace (inline array or inline table).
-    FROZEN = 0
+    FROZEN: ClassVar = 0
     # Marks a nest that has been explicitly created and can no longer
     # be opened using the "[table]" syntax.
-    EXPLICIT_NEST = 1
+    EXPLICIT_NEST: ClassVar = 1
 
     def __init__(self) -> None:
-        self._flags: dict[str, dict] = {}
+        self._flags: _Flags = {}
         self._pending_flags: set[tuple[Key, int]] = set()
 
     def add_pending(self, key: Key, flag: int) -> None:
@@ -170,7 +186,10 @@ class Flags:
             cont = cont[k]["nested"]
         if key_stem not in cont:
             cont[key_stem] = {"flags": set(), "recursive_flags": set(), "nested": {}}
-        cont[key_stem]["recursive_flags" if recursive else "flags"].add(flag)
+        if recursive:
+            cont[key_stem]["recursive_flags"].add(flag)
+        else:
+            cont[key_stem]["flags"].add(flag)
 
     def is_(self, key: Key, flag: int) -> bool:
         if not key:
@@ -185,8 +204,8 @@ class Flags:
             cont = inner_cont["nested"]
         key_stem = key[-1]
         if key_stem in cont:
-            cont = cont[key_stem]
-            return flag in cont["flags"] or flag in cont["recursive_flags"]
+            cont_val = cont[key_stem]
+            return flag in cont_val["flags"] or flag in cont_val["recursive_flags"]
         return False
 
 
@@ -200,15 +219,21 @@ class NestedDict:
         key: Key,
         *,
         access_lists: bool = True,
-    ) -> dict:
-        cont: Any = self.dict
+    ) -> dict[str, Any]:
+        cont = self.dict
         for k in key:
             if k not in cont:
                 cont[k] = {}
-            cont = cont[k]
-            if access_lists and isinstance(cont, list):
-                cont = cont[-1]
-            if not isinstance(cont, dict):
+
+            val = cont[k]
+            if isinstance(val, list):
+                if access_lists:
+                    cont = val[-1]
+                else:
+                    raise KeyError("There is no nest behind this key")
+            elif isinstance(val, dict):
+                cont = val
+            else:
                 raise KeyError("There is no nest behind this key")
         return cont
 
@@ -409,9 +434,11 @@ def parse_one_line_basic_str(src: str, pos: Pos) -> tuple[Pos, str]:
     return parse_basic_str(src, pos, multiline=False)
 
 
-def parse_array(src: str, pos: Pos, parse_float: ParseFloat) -> tuple[Pos, list]:
+def parse_array(
+    src: str, pos: Pos, parse_float: ParseFloat
+) -> tuple[Pos, list[object]]:
     pos += 1
-    array: list = []
+    array: list[object] = []
 
     pos = skip_comments_and_array_ws(src, pos)
     if src.startswith("]", pos):
@@ -433,7 +460,9 @@ def parse_array(src: str, pos: Pos, parse_float: ParseFloat) -> tuple[Pos, list]
             return pos + 1, array
 
 
-def parse_inline_table(src: str, pos: Pos, parse_float: ParseFloat) -> tuple[Pos, dict]:
+def parse_inline_table(
+    src: str, pos: Pos, parse_float: ParseFloat
+) -> tuple[Pos, dict[str, Any]]:
     pos += 1
     nested_dict = NestedDict()
     flags = Flags()
@@ -581,9 +610,9 @@ def parse_basic_str(src: str, pos: Pos, *, multiline: bool) -> tuple[Pos, str]:
         pos += 1
 
 
-def parse_value(  # noqa: C901
+def parse_value(
     src: str, pos: Pos, parse_float: ParseFloat
-) -> tuple[Pos, Any]:
+) -> tuple[Pos, object]:  # noqa: C901
     try:
         char: str | None = src[pos]
     except IndexError:
@@ -652,6 +681,7 @@ def parse_value(  # noqa: C901
 def suffixed_err(src: str, pos: Pos, msg: str) -> TOMLDecodeError:
     """Return a `TOMLDecodeError` where error message is suffixed with
     coordinates in source."""
+    from . import TOMLDecodeError
 
     def coord_repr(src: str, pos: Pos) -> str:
         if pos >= len(src):
@@ -679,7 +709,7 @@ def make_safe_parse_float(parse_float: ParseFloat) -> ParseFloat:
     instead of returning illegal types.
     """
     # The default `float` callable never returns illegal types. Optimize it.
-    if parse_float is float:  # type: ignore[comparison-overlap]
+    if parse_float is float:
         return float
 
     def safe_parse_float(float_str: str) -> Any:
