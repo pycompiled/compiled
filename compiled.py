@@ -4,22 +4,24 @@ import contextlib
 import os
 import shutil
 import subprocess
+import sys
 from typing import Literal
 
 
 ROOT_DIR = os.path.normpath(os.path.dirname(__file__))
 LIB_BASE_DIR = os.path.join(ROOT_DIR, "Lib")
 TEST_BASE_DIR = os.path.join(ROOT_DIR, "Lib/test")
-TMP_LIB_DIR = os.path.join("/tmp/pycompiled")
+TMP_LIB_DIR = "/tmp/pycompiled"
 
 
 def run_test(test_file_or_folder: str) -> int:
     with contextlib.chdir(TMP_LIB_DIR):
         test_relative_path = f"compiled_tests/{test_file_or_folder}"
-        file_command = ["python", "-m" "unittest", test_relative_path]
+        file_command = [sys.executable, "-m" "unittest", test_relative_path]
         folder_command = [
-            "python",
-            "-m" "unittest",
+            sys.executable,
+            "-m",
+            "unittest",
             "discover",
             "-s",
             test_relative_path,
@@ -42,13 +44,19 @@ def run_mypyc(library_name: str) -> int:
         return process.returncode
 
 
-def delete_python_files_and_pycache(library_name: str) -> None:
-    library_path = os.path.join(TMP_LIB_DIR, library_name)
-    shutil.rmtree(os.path.join(library_path, "__pycache__"), ignore_errors=True)
-    for file in os.listdir(library_path):
-        if file.endswith(".py"):
-            os.remove(os.path.join(library_path, file))
+def delete_python_files_and_pycache(library_path: str) -> None:
+    """Deletes all `.py` files and `__pycache__`, leaving `.pyc` files behind."""
+    if os.path.isfile(library_path):
+        pycache_path = os.path.join(os.path.dirname(library_path), "__pycache__")
+        os.remove(library_path)
+    else:
+        pycache_path = os.path.join(library_path, "__pycache__")
+        for file in os.listdir(library_path):
+            if file.endswith(".py"):
+                os.remove(os.path.join(library_path, file))
 
+    # delete pycache
+    shutil.rmtree(pycache_path)
 
 class CompiledNamespace:
     subcommand: Literal["test", "mypy", "mypyc", "test_compiled"]
@@ -74,14 +82,26 @@ def main() -> int:
     args = parser.parse_args(namespace=CompiledNamespace)
     library_name = args.library
 
-    library_path = os.path.join(LIB_BASE_DIR, library_name)
-    if not os.path.isdir(library_path):
-        print(f"Library path {library_path} doesn't exist")
-        return 1
+    os.makedirs(TMP_LIB_DIR)
+
+    library_path = os.path.join(LIB_BASE_DIR, library_name + ".py")
+    if not os.path.isfile(library_path):
+        library_dir_path = os.path.join(LIB_BASE_DIR, library_name)
+        if not os.path.isdir(library_dir_path):
+            print(
+                f"Library {library_path} not found. "
+                f"(Tried {library_path}, {library_dir_path})"
+            )
+            return 1
+
+        library_path = library_dir_path
 
     try:
-        tmp_library_path = os.path.join(TMP_LIB_DIR, library_name)
-        shutil.copytree(library_path, tmp_library_path)
+        if os.path.isfile(library_path):
+            tmp_library_path = shutil.copy(library_path, TMP_LIB_DIR)
+        else:
+            tmp_library_path = os.path.join(TMP_LIB_DIR, library_name)
+            shutil.copytree(library_path, tmp_library_path)
 
         if os.path.isfile(os.path.join(TEST_BASE_DIR, f"test_{library_name}.py")):
             os.makedirs(os.path.join(TMP_LIB_DIR, "compiled_tests"), exist_ok=True)
@@ -125,21 +145,21 @@ def main() -> int:
             return run_test(test_file_or_folder)
 
         if args.subcommand == "mypy":
-            return run_mypy(library_name)
+            return run_mypy(os.path.basename(library_path))
 
         if args.subcommand == "mypyc":
-            return run_mypyc(library_name)
+            return run_mypyc(os.path.basename(library_path))
 
         if args.subcommand == "test_compiled":
-            returncode = run_mypyc(library_name)
+            returncode = run_mypyc(os.path.basename(library_path))
             if returncode != 0:
                 return returncode
 
-            delete_python_files_and_pycache(library_name)
+            delete_python_files_and_pycache(tmp_library_path)
             return run_test(test_file_or_folder)
 
     finally:
-        shutil.rmtree(TMP_LIB_DIR)
+        shutil.rmtree(TMP_LIB_DIR, ignore_errors=True)
 
     raise AssertionError("unreachable")
 
