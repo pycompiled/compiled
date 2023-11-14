@@ -25,21 +25,29 @@ Class Differ:
 Class HtmlDiff:
     For producing HTML side by side comparison with change highlights.
 """
+from __future__ import annotations
 
 __all__ = ['get_close_matches', 'ndiff', 'restore', 'SequenceMatcher',
            'Differ','IS_CHARACTER_JUNK', 'IS_LINE_JUNK', 'context_diff',
            'unified_diff', 'diff_bytes', 'HtmlDiff', 'Match']
 
 from heapq import nlargest as _nlargest
-from collections import namedtuple as _namedtuple
 from types import GenericAlias
+from typing import Callable, ClassVar, Iterable, Iterator, NamedTuple, Sequence, TypeAlias
 
-Match = _namedtuple('Match', 'a b size')
+class Match(NamedTuple):
+    a: int
+    b: int
+    size: int
 
-def _calculate_ratio(matches, length):
+def _calculate_ratio(matches: int, length: int) -> float:
     if length:
         return 2.0 * matches / length
     return 1.0
+
+Lines: TypeAlias = Sequence[str]
+Opcode: TypeAlias = tuple[str, int, int, int, int]
+StrPredicate: TypeAlias = Callable[[str], bool]
 
 class SequenceMatcher:
 
@@ -117,7 +125,13 @@ class SequenceMatcher:
     elements the sequences have in common; best case time is linear.
     """
 
-    def __init__(self, isjunk=None, a='', b='', autojunk=True):
+    def __init__(
+        self,
+        isjunk: StrPredicate | None = None,
+        a: Lines = '',
+        b: Lines = '',
+        autojunk: bool = True,
+    ) -> None:
         """Construct a SequenceMatcher.
 
         Optional arg isjunk is None (the default), or a one-argument
@@ -175,13 +189,17 @@ class SequenceMatcher:
         #      the items in b for which isjunk is True.
         # bpopular
         #      nonjunk items in b treated as junk by the heuristic (if used).
+        self.matching_blocks: list[Match] | None
+        self.opcodes: list[Opcode] | None
+        self.fullbcount: dict[str, int] | None
 
         self.isjunk = isjunk
-        self.a = self.b = None
+        self.a: Lines | None = None
+        self.b: Lines | None = None
         self.autojunk = autojunk
         self.set_seqs(a, b)
 
-    def set_seqs(self, a, b):
+    def set_seqs(self, a: Lines, b: Lines) -> None:
         """Set the two sequences to be compared.
 
         >>> s = SequenceMatcher()
@@ -193,7 +211,7 @@ class SequenceMatcher:
         self.set_seq1(a)
         self.set_seq2(b)
 
-    def set_seq1(self, a):
+    def set_seq1(self, a: Lines) -> None:
         """Set the first sequence to be compared.
 
         The second sequence to be compared is not changed.
@@ -219,7 +237,7 @@ class SequenceMatcher:
         self.a = a
         self.matching_blocks = self.opcodes = None
 
-    def set_seq2(self, b):
+    def set_seq2(self, b: Lines) -> None:
         """Set the second sequence to be compared.
 
         The first sequence to be compared is not changed.
@@ -263,7 +281,7 @@ class SequenceMatcher:
     # kinds of matches, it's best to call set_seq2 once, then set_seq1
     # repeatedly
 
-    def __chain_b(self):
+    def __chain_b(self) -> None:
         # Because isjunk is a user-defined (not C) function, and we test
         # for junk a LOT, it's important to minimize the number of calls.
         # Before the tricks described here, __chain_b was by far the most
@@ -275,14 +293,15 @@ class SequenceMatcher:
         # out the junk later is much cheaper than building b2j "right"
         # from the start.
         b = self.b
-        self.b2j = b2j = {}
+        assert b is not None
+        self.b2j = b2j = dict[str, list[int]]()
 
         for i, elt in enumerate(b):
             indices = b2j.setdefault(elt, [])
             indices.append(i)
 
         # Purge junk elements
-        self.bjunk = junk = set()
+        self.bjunk = junk = set[str]()
         isjunk = self.isjunk
         if isjunk:
             for elt in b2j.keys():
@@ -292,7 +311,7 @@ class SequenceMatcher:
                 del b2j[elt]
 
         # Purge popular elements that are not junk
-        self.bpopular = popular = set()
+        self.bpopular = popular = set[str]()
         n = len(b)
         if self.autojunk and n >= 200:
             ntest = n // 100 + 1
@@ -302,7 +321,13 @@ class SequenceMatcher:
             for elt in popular: # ditto; as fast for 1% deletion
                 del b2j[elt]
 
-    def find_longest_match(self, alo=0, ahi=None, blo=0, bhi=None):
+    def find_longest_match(
+        self,
+        alo: int = 0,
+        ahi: int | None = None,
+        blo: int = 0,
+        bhi: int | None = None,
+    ) -> Match:
         """Find longest matching block in a[alo:ahi] and b[blo:bhi].
 
         By default it will find the longest match in the entirety of a and b.
@@ -361,6 +386,8 @@ class SequenceMatcher:
         # the unique 'b's and then matching the first two 'a's.
 
         a, b, b2j, isbjunk = self.a, self.b, self.b2j, self.bjunk.__contains__
+        assert a is not None
+        assert b is not None
         if ahi is None:
             ahi = len(a)
         if bhi is None:
@@ -369,8 +396,8 @@ class SequenceMatcher:
         # find longest junk-free match
         # during an iteration of the loop, j2len[j] = length of longest
         # junk-free match ending with a[i-1] and b[j]
-        j2len = {}
-        nothing = []
+        j2len: dict[int, int] = {}
+        nothing: list[int] = []
         for i in range(alo, ahi):
             # look at all instances of a[i] in b; note that because
             # b2j has no junk keys, the loop is skipped if a[i] is junk
@@ -418,7 +445,7 @@ class SequenceMatcher:
 
         return Match(besti, bestj, bestsize)
 
-    def get_matching_blocks(self):
+    def get_matching_blocks(self) -> list[Match]:
         """Return list of triples describing matching subsequences.
 
         Each triple is of the form (i, j, n), and means that
@@ -439,6 +466,8 @@ class SequenceMatcher:
 
         if self.matching_blocks is not None:
             return self.matching_blocks
+        assert self.a is not None
+        assert self.b is not None
         la, lb = len(self.a), len(self.b)
 
         # This is most naturally expressed as a recursive algorithm, but
@@ -489,7 +518,7 @@ class SequenceMatcher:
         self.matching_blocks = list(map(Match._make, non_adjacent))
         return self.matching_blocks
 
-    def get_opcodes(self):
+    def get_opcodes(self) -> list[Opcode]:
         """Return list of 5-tuples describing how to turn a into b.
 
         Each tuple is of the form (tag, i1, i2, j1, j2).  The first tuple
@@ -517,10 +546,10 @@ class SequenceMatcher:
           equal a[4:6] (cd) b[3:5] (cd)
          insert a[6:6] () b[5:6] (f)
         """
-
         if self.opcodes is not None:
             return self.opcodes
         i = j = 0
+        answer: list[Opcode]
         self.opcodes = answer = []
         for ai, bj, size in self.get_matching_blocks():
             # invariant:  we've pumped out correct diffs to change
@@ -544,7 +573,7 @@ class SequenceMatcher:
                 answer.append( ('equal', ai, i, bj, j) )
         return answer
 
-    def get_grouped_opcodes(self, n=3):
+    def get_grouped_opcodes(self, n: int = 3) -> Iterator[list[Opcode]]:
         """ Isolate change clusters by eliminating ranges with no changes.
 
         Return a generator of groups with up to n lines of context.
@@ -594,7 +623,7 @@ class SequenceMatcher:
         if group and not (len(group)==1 and group[0][0] == 'equal'):
             yield group
 
-    def ratio(self):
+    def ratio(self) -> float:
         """Return a measure of the sequences' similarity (float in [0,1]).
 
         Where T is the total number of elements in both sequences, and
@@ -615,28 +644,33 @@ class SequenceMatcher:
         >>> s.real_quick_ratio()
         1.0
         """
+        assert self.a is not None
+        assert self.b is not None
 
         matches = sum(triple[-1] for triple in self.get_matching_blocks())
         return _calculate_ratio(matches, len(self.a) + len(self.b))
 
-    def quick_ratio(self):
+    def quick_ratio(self) -> float:
         """Return an upper bound on ratio() relatively quickly.
 
         This isn't defined beyond that it is an upper bound on .ratio(), and
         is faster to compute.
         """
+        assert self.a is not None
+        assert self.b is not None
 
         # viewing a and b as multisets, set matches to the cardinality
         # of their intersection; this counts the number of matches
         # without regard to order, so is clearly an upper bound
         if self.fullbcount is None:
+            fullbcount: dict[str, int]
             self.fullbcount = fullbcount = {}
             for elt in self.b:
                 fullbcount[elt] = fullbcount.get(elt, 0) + 1
         fullbcount = self.fullbcount
         # avail[x] is the number of times x appears in 'b' less the
         # number of times we've seen it in 'a' so far ... kinda
-        avail = {}
+        avail: dict[str, int] = {}
         availhas, matches = avail.__contains__, 0
         for elt in self.a:
             if availhas(elt):
@@ -648,22 +682,31 @@ class SequenceMatcher:
                 matches = matches + 1
         return _calculate_ratio(matches, len(self.a) + len(self.b))
 
-    def real_quick_ratio(self):
+    def real_quick_ratio(self) -> float:
         """Return an upper bound on ratio() very quickly.
 
         This isn't defined beyond that it is an upper bound on .ratio(), and
         is faster to compute than either .ratio() or .quick_ratio().
         """
+        assert self.a is not None
+        assert self.b is not None
 
         la, lb = len(self.a), len(self.b)
         # can't have more matches than the number of elements in the
         # shorter sequence
         return _calculate_ratio(min(la, lb), la + lb)
 
-    __class_getitem__ = classmethod(GenericAlias)
+    @classmethod
+    def __class_getitem__(cls, item: object) -> GenericAlias:
+        return GenericAlias(cls, item)
 
 
-def get_close_matches(word, possibilities, n=3, cutoff=0.6):
+def get_close_matches(
+    word: str,
+    possibilities: Iterable[str],
+    n: int = 3,
+    cutoff: float = 0.6,
+) -> list[str]:
     """Use SequenceMatcher to return list of the best "good enough" matches.
 
     word is a sequence for which close matches are desired (typically a
@@ -712,7 +755,7 @@ def get_close_matches(word, possibilities, n=3, cutoff=0.6):
     return [x for score, x in result]
 
 
-def _keep_original_ws(s, tag_s):
+def _keep_original_ws(s: str, tag_s: str) -> str:
     """Replace whitespace with the original whitespace characters in `s`"""
     return ''.join(
         c if tag_c == " " and c.isspace() else tag_c
@@ -807,7 +850,11 @@ class Differ:
     +   5. Flat is better than nested.
     """
 
-    def __init__(self, linejunk=None, charjunk=None):
+    def __init__(
+        self,
+        linejunk: StrPredicate | None = None,
+        charjunk: StrPredicate | None = None,
+    ) -> None:
         """
         Construct a text differencer, with optional filters.
 
@@ -830,7 +877,7 @@ class Differ:
         self.linejunk = linejunk
         self.charjunk = charjunk
 
-    def compare(self, a, b):
+    def compare(self, a: Lines, b: Lines) -> Iterator[str]:
         r"""
         Compare two sequences of lines; generate the resulting delta.
 
@@ -871,12 +918,14 @@ class Differ:
 
             yield from g
 
-    def _dump(self, tag, x, lo, hi):
+    def _dump(self, tag: str, x: Lines, lo: int, hi: int) -> Iterator[str]:
         """Generate comparison results for a same-tagged range."""
         for i in range(lo, hi):
             yield '%s %s' % (tag, x[i])
 
-    def _plain_replace(self, a, alo, ahi, b, blo, bhi):
+    def _plain_replace(
+        self, a: Lines, alo: int, ahi: int, b: Lines, blo: int, bhi: int
+    ) -> Iterator[str]:
         assert alo < ahi and blo < bhi
         # dump the shorter block first -- reduces the burden on short-term
         # memory if the blocks are of very different sizes
@@ -890,7 +939,9 @@ class Differ:
         for g in first, second:
             yield from g
 
-    def _fancy_replace(self, a, alo, ahi, b, blo, bhi):
+    def _fancy_replace(
+        self, a: Lines, alo: int, ahi: int, b: Lines, blo: int, bhi: int
+    ) -> Iterator[str]:
         r"""
         When replacing one block of lines with another, search the blocks
         for *similar* lines; the best-matching pair (if any) is used as a
@@ -913,7 +964,9 @@ class Differ:
         # least cutoff; best_ratio tracks the best score seen so far
         best_ratio, cutoff = 0.74, 0.75
         cruncher = SequenceMatcher(self.charjunk)
-        eqi, eqj = None, None   # 1st indices of equal lines (if any)
+        # 1st indices of equal lines (if any)
+        eqi: int | None = None
+        eqj: int | None = None
 
         # search for the pair that matches best without being identical
         # (identical lines must be junk lines, & we don't want to synch up
@@ -944,6 +997,7 @@ class Differ:
                 # no identical pair either -- treat it as a straight replace
                 yield from self._plain_replace(a, alo, ahi, b, blo, bhi)
                 return
+            assert eqj is not None
             # no close pair, but an identical pair -- synch up on that
             best_i, best_j, best_ratio = eqi, eqj, 1.0
         else:
@@ -984,8 +1038,10 @@ class Differ:
         # pump out diffs from after the synch point
         yield from self._fancy_helper(a, best_i+1, ahi, b, best_j+1, bhi)
 
-    def _fancy_helper(self, a, alo, ahi, b, blo, bhi):
-        g = []
+    def _fancy_helper(
+        self, a: Lines, alo: int, ahi: int, b: Lines, blo: int, bhi: int
+    ) -> Iterator[str]:
+        g: Iterable[str] = []
         if alo < ahi:
             if blo < bhi:
                 g = self._fancy_replace(a, alo, ahi, b, blo, bhi)
@@ -996,7 +1052,7 @@ class Differ:
 
         yield from g
 
-    def _qformat(self, aline, bline, atags, btags):
+    def _qformat(self, aline: str, bline: str, atags: str, btags: str) -> Iterator[str]:
         r"""
         Format "?" output and deal with tabs.
 
@@ -1042,7 +1098,10 @@ class Differ:
 
 import re
 
-def IS_LINE_JUNK(line, pat=re.compile(r"\s*(?:#\s*)?$").match):
+def IS_LINE_JUNK(
+    line: str,
+    pat: Callable[[str], re.Match[str] | None] = re.compile(r"\s*(?:#\s*)?$").match,
+) -> bool:
     r"""
     Return True for ignorable line: iff `line` is blank or contains a single '#'.
 
@@ -1058,7 +1117,7 @@ def IS_LINE_JUNK(line, pat=re.compile(r"\s*(?:#\s*)?$").match):
 
     return pat(line) is not None
 
-def IS_CHARACTER_JUNK(ch, ws=" \t"):
+def IS_CHARACTER_JUNK(ch: str, ws: str = " \t") -> bool:
     r"""
     Return True for ignorable character: iff `ch` is a space or tab.
 
@@ -1081,7 +1140,7 @@ def IS_CHARACTER_JUNK(ch, ws=" \t"):
 ###  Unified Diff
 ########################################################################
 
-def _format_range_unified(start, stop):
+def _format_range_unified(start: int, stop: int) -> str:
     'Convert range to the "ed" format'
     # Per the diff spec at http://www.unix.org/single_unix_specification/
     beginning = start + 1     # lines start numbering with one
@@ -1092,8 +1151,16 @@ def _format_range_unified(start, stop):
         beginning -= 1        # empty ranges begin at line just before the range
     return '{},{}'.format(beginning, length)
 
-def unified_diff(a, b, fromfile='', tofile='', fromfiledate='',
-                 tofiledate='', n=3, lineterm='\n'):
+def unified_diff(
+    a: Lines,
+    b: Lines,
+    fromfile: str = '',
+    tofile: str = '',
+    fromfiledate: str = '',
+    tofiledate: str = '',
+    n: int = 3,
+    lineterm: str = '\n',
+) -> Iterator[str]:
     r"""
     Compare two sequences of lines; generate the delta as a unified diff.
 
@@ -1165,7 +1232,7 @@ def unified_diff(a, b, fromfile='', tofile='', fromfiledate='',
 ###  Context Diff
 ########################################################################
 
-def _format_range_context(start, stop):
+def _format_range_context(start: int, stop: int) -> str:
     'Convert range to the "ed" format'
     # Per the diff spec at http://www.unix.org/single_unix_specification/
     beginning = start + 1     # lines start numbering with one
@@ -1177,8 +1244,16 @@ def _format_range_context(start, stop):
     return '{},{}'.format(beginning, beginning + length - 1)
 
 # See http://www.unix.org/single_unix_specification/
-def context_diff(a, b, fromfile='', tofile='',
-                 fromfiledate='', tofiledate='', n=3, lineterm='\n'):
+def context_diff(
+    a: Lines,
+    b: Lines,
+    fromfile: str = '',
+    tofile: str = '',
+    fromfiledate: str = '',
+    tofiledate: str = '',
+    n: int = 3,
+    lineterm: str = '\n',
+) -> Iterator[str]:
     r"""
     Compare two sequences of lines; generate the delta as a context diff.
 
@@ -1253,7 +1328,7 @@ def context_diff(a, b, fromfile='', tofile='',
                     for line in b[j1:j2]:
                         yield prefix[tag] + line
 
-def _check_types(a, b, *args):
+def _check_types(a: Lines, b: Lines, *args: object) -> None:
     # Checking types is weird, but the alternative is garbled output when
     # someone passes mixed bytes and str to {unified,context}_diff(). E.g.
     # without this check, passing filenames as bytes results in output like
@@ -1268,10 +1343,19 @@ def _check_types(a, b, *args):
                         (type(b[0]).__name__, b[0]))
     for arg in args:
         if not isinstance(arg, str):
-            raise TypeError('all arguments must be str, not: %r' % (arg,))
+            raise TypeError('str object expected; got %s' % (type(arg).__name__,))
 
-def diff_bytes(dfunc, a, b, fromfile=b'', tofile=b'',
-               fromfiledate=b'', tofiledate=b'', n=3, lineterm=b'\n'):
+def diff_bytes(
+    dfunc: Callable[[Lines, Lines, str, str, str, str, int, str], Iterator[str]],
+    a: Sequence[bytes],
+    b: Sequence[bytes],
+    fromfile: bytes = b'',
+    tofile: bytes = b'',
+    fromfiledate: bytes = b'',
+    tofiledate: bytes = b'',
+    n: int = 3,
+    lineterm: bytes = b'\n',
+) -> Iterator[bytes]:
     r"""
     Compare `a` and `b`, two sequences of lines represented as bytes rather
     than str. This is a wrapper for `dfunc`, which is typically either
@@ -1281,26 +1365,30 @@ def diff_bytes(dfunc, a, b, fromfile=b'', tofile=b'',
     unknown or inconsistent encoding. All other inputs (except `n`) must be
     bytes rather than str.
     """
-    def decode(s):
+    def decode(s: bytes) -> str:
         try:
             return s.decode('ascii', 'surrogateescape')
         except AttributeError as err:
-            msg = ('all arguments must be bytes, not %s (%r)' %
-                   (type(s).__name__, s))
+            msg = 'bytes object expected; got %s' % (type(s).__name__,)
             raise TypeError(msg) from err
-    a = list(map(decode, a))
-    b = list(map(decode, b))
-    fromfile = decode(fromfile)
-    tofile = decode(tofile)
-    fromfiledate = decode(fromfiledate)
-    tofiledate = decode(tofiledate)
-    lineterm = decode(lineterm)
+    a_str = list(map(decode, a))
+    b_str = list(map(decode, b))
+    fromfile_str = decode(fromfile)
+    tofile_str = decode(tofile)
+    fromfiledate_str = decode(fromfiledate)
+    tofiledate_str = decode(tofiledate)
+    lineterm_str = decode(lineterm)
 
-    lines = dfunc(a, b, fromfile, tofile, fromfiledate, tofiledate, n, lineterm)
+    lines = dfunc(a_str, b_str, fromfile_str, tofile_str, fromfiledate_str, tofiledate_str, n, lineterm_str)
     for line in lines:
         yield line.encode('ascii', 'surrogateescape')
 
-def ndiff(a, b, linejunk=None, charjunk=IS_CHARACTER_JUNK):
+def ndiff(
+    a: Lines,
+    b: Lines,
+    linejunk: StrPredicate | None = None,
+    charjunk: StrPredicate = IS_CHARACTER_JUNK,
+) -> Iterator[str]:
     r"""
     Compare `a` and `b` (lists of strings); return a `Differ`-style delta.
 
@@ -1337,8 +1425,17 @@ def ndiff(a, b, linejunk=None, charjunk=IS_CHARACTER_JUNK):
     """
     return Differ(linejunk, charjunk).compare(a, b)
 
-def _mdiff(fromlines, tolines, context=None, linejunk=None,
-           charjunk=IS_CHARACTER_JUNK):
+# used by `_line_iterator`
+_Line: TypeAlias = tuple[int | str, str] | None
+_LinePair: TypeAlias = tuple[_Line | None, _Line | None, bool | None]
+
+def _mdiff(
+    fromlines: Lines,
+    tolines: Lines,
+    context: int | None = None,
+    linejunk: StrPredicate | None = None,
+    charjunk: StrPredicate = IS_CHARACTER_JUNK,
+) -> Iterator[_LinePair]:
     r"""Returns generator yielding marked up from/to side by side differences.
 
     Arguments:
@@ -1379,7 +1476,12 @@ def _mdiff(fromlines, tolines, context=None, linejunk=None,
     # create the difference iterator to generate the differences
     diff_lines_iterator = ndiff(fromlines,tolines,linejunk,charjunk)
 
-    def _make_line(lines, format_key, side, num_lines=[0,0]):
+    def _make_line(
+        lines: list[str],
+        format_key: str | None,
+        side: int,
+        num_lines: list[int] = [0,0],
+    ) -> tuple[int, str]:
         """Returns line of text with user's change markup and line formatting.
 
         lines -- list of lines from the ndiff generator to produce a line of
@@ -1411,9 +1513,12 @@ def _mdiff(fromlines, tolines, context=None, linejunk=None,
         if format_key == '?':
             text, markers = lines.pop(0), lines.pop(0)
             # find intraline changes (store change type and indices in tuples)
-            sub_info = []
-            def record_sub_info(match_object,sub_info=sub_info):
-                sub_info.append([match_object.group(1)[0],match_object.span()])
+            sub_info: list[tuple[str, tuple[int, int]]] = []
+            def record_sub_info(
+                match_object: re.Match[str],
+                sub_info: list[tuple[str, tuple[int, int]]] = sub_info,
+            ) -> str:
+                sub_info.append((match_object.group(1)[0],match_object.span()))
                 return match_object.group(1)
             change_re.sub(record_sub_info,markers)
             # process each tuple inserting our special marks that won't be
@@ -1435,7 +1540,7 @@ def _mdiff(fromlines, tolines, context=None, linejunk=None,
         # marks with what the user's change markup.
         return (num_lines[side],text)
 
-    def _line_iterator():
+    def _line_iterator() -> Iterator[tuple[_Line, _Line, bool]]:
         """Yields from/to lines of text with a change indication.
 
         This function is an iterator.  It itself pulls lines from a
@@ -1449,7 +1554,7 @@ def _mdiff(fromlines, tolines, context=None, linejunk=None,
         that data it needs from its parent function (within whose context it
         is defined) does not need to be of module scope.
         """
-        lines = []
+        lines: list[str] = []
         num_blanks_pending, num_blanks_to_yield = 0, 0
         while True:
             # Load up next 4 lines so we can look ahead, create strings which
@@ -1458,6 +1563,8 @@ def _mdiff(fromlines, tolines, context=None, linejunk=None,
             while len(lines) < 4:
                 lines.append(next(diff_lines_iterator, 'X'))
             s = ''.join([line[0] for line in lines])
+            from_line: tuple[int, str] | None
+            to_line: tuple[int, str] | None
             if s.startswith('X'):
                 # When no more lines, pump out any remaining blank lines so the
                 # corresponding add/delete lines get a matching blank line so
@@ -1523,7 +1630,7 @@ def _mdiff(fromlines, tolines, context=None, linejunk=None,
             else:
                 yield from_line,to_line,True
 
-    def _line_pair_iterator():
+    def _line_pair_iterator() -> Iterator[_LinePair]:
         """Yields from/to lines of text with a change indication.
 
         This function is an iterator.  It itself pulls lines from the line
@@ -1537,7 +1644,9 @@ def _mdiff(fromlines, tolines, context=None, linejunk=None,
         is defined) does not need to be of module scope.
         """
         line_iterator = _line_iterator()
-        fromlines,tolines=[],[]
+
+        fromlines: list[tuple[_Line, bool]] = []
+        tolines: list[tuple[_Line, bool]] = []
         while True:
             # Collecting lines of text until we have a from/to pair
             while (len(fromlines)==0 or len(tolines)==0):
@@ -1568,8 +1677,9 @@ def _mdiff(fromlines, tolines, context=None, linejunk=None,
             # Store lines up until we find a difference, note use of a
             # circular queue because we only need to keep around what
             # we need for context.
+            contextLines: list[_LinePair | None]
             index, contextLines = 0, [None]*(context)
-            found_diff = False
+            found_diff: bool | None = False
             while(found_diff is False):
                 try:
                     from_line, to_line, found_diff = next(line_pair_iterator)
@@ -1589,7 +1699,9 @@ def _mdiff(fromlines, tolines, context=None, linejunk=None,
             while(lines_to_write):
                 i = index % context
                 index += 1
-                yield contextLines[i]
+                context_line = contextLines[i]
+                assert context_line is not None
+                yield context_line
                 lines_to_write -= 1
             # Now yield the context lines after the change
             lines_to_write = context-1
@@ -1663,6 +1775,10 @@ _legend = """
                   </table></td> </tr>
     </table>"""
 
+
+DiffData: TypeAlias = tuple[int | str, str]
+
+
 class HtmlDiff(object):
     """For producing HTML side by side comparison with change highlights.
 
@@ -1679,14 +1795,19 @@ class HtmlDiff(object):
     See tools/scripts/diff.py for an example usage of this class.
     """
 
-    _file_template = _file_template
-    _styles = _styles
-    _table_template = _table_template
-    _legend = _legend
-    _default_prefix = 0
+    _file_template: ClassVar[str] = _file_template
+    _styles: ClassVar[str] = _styles
+    _table_template: ClassVar[str] = _table_template
+    _legend: ClassVar[str] = _legend
+    _default_prefix: ClassVar[int] = 0
 
-    def __init__(self,tabsize=8,wrapcolumn=None,linejunk=None,
-                 charjunk=IS_CHARACTER_JUNK):
+    def __init__(
+        self,
+        tabsize: int = 8,
+        wrapcolumn: int | None = None,
+        linejunk: StrPredicate | None = None,
+        charjunk: StrPredicate = IS_CHARACTER_JUNK,
+    ):
         """HtmlDiff instance initializer
 
         Arguments:
@@ -1702,8 +1823,17 @@ class HtmlDiff(object):
         self._linejunk = linejunk
         self._charjunk = charjunk
 
-    def make_file(self, fromlines, tolines, fromdesc='', todesc='',
-                  context=False, numlines=5, *, charset='utf-8'):
+    def make_file(
+        self,
+        fromlines: Lines,
+        tolines: Lines,
+        fromdesc: str = '',
+        todesc: str = '',
+        context: bool = False,
+        numlines: int = 5,
+        *,
+        charset: str = 'utf-8',
+    ) -> str:
         """Returns HTML file of side by side comparison with change highlights
 
         Arguments:
@@ -1729,7 +1859,9 @@ class HtmlDiff(object):
             charset=charset
         )).encode(charset, 'xmlcharrefreplace').decode(charset)
 
-    def _tab_newline_replace(self,fromlines,tolines):
+    def _tab_newline_replace(
+        self, fromlines: Lines, tolines: Lines
+    ) -> tuple[Lines, Lines]:
         """Returns from/to line lists with tabs expanded and newlines removed.
 
         Instead of tab characters being replaced by the number of spaces
@@ -1739,7 +1871,7 @@ class HtmlDiff(object):
         spaces and vice versa.  At the end of the HTML generation, the tab
         characters will be replaced with a nonbreakable space.
         """
-        def expand_tabs(line):
+        def expand_tabs(line: str) -> str:
             # hide real spaces
             line = line.replace(' ','\0')
             # expand tabs into spaces
@@ -1752,7 +1884,9 @@ class HtmlDiff(object):
         tolines = [expand_tabs(line) for line in tolines]
         return fromlines,tolines
 
-    def _split_line(self,data_list,line_num,text):
+    def _split_line(
+        self,data_list: list[DiffData], line_num: int | str, text: str
+    ) -> None:
         """Builds list of text lines by splitting text lines at wrap point
 
         This function will determine if the input text line needs to be
@@ -1769,6 +1903,7 @@ class HtmlDiff(object):
         # if line text doesn't need wrapping, just add it to the output list
         size = len(text)
         max = self._wrapcolumn
+        assert max is not None
         if (size <= max) or ((size -(text.count('\0')*3)) <= max):
             data_list.append((line_num,text))
             return
@@ -1807,19 +1942,26 @@ class HtmlDiff(object):
         # use this routine again to wrap the remaining text
         self._split_line(data_list,'>',line2)
 
-    def _line_wrapper(self,diffs):
+    def _line_wrapper(
+        self,
+        diffs: Iterable[_LinePair],
+    ) -> Iterator[_LinePair]:
         """Returns iterator that splits (wraps) mdiff text lines"""
 
         # pull from/to data and flags from mdiff iterator
+        flag: bool | None
         for fromdata,todata,flag in diffs:
             # check for context separators and pass them through
             if flag is None:
                 yield fromdata,todata,flag
                 continue
+            assert fromdata is not None
+            assert todata is not None
             (fromline,fromtext),(toline,totext) = fromdata,todata
             # for each from/to line split it at the wrap column to form
             # list of text lines.
-            fromlist,tolist = [],[]
+            fromlist: list[DiffData] = []
+            tolist: list[DiffData] = []
             self._split_line(fromlist,fromline,fromtext)
             self._split_line(tolist,toline,totext)
             # yield from/to line in pairs inserting blank lines as
@@ -1835,28 +1977,34 @@ class HtmlDiff(object):
                     todata = ('',' ')
                 yield fromdata,todata,flag
 
-    def _collect_lines(self,diffs):
+    def _collect_lines(
+        self,
+        diffs: Iterable[_LinePair],
+    ) -> tuple[list[str | None], list[str | None], list[bool | None]]:
         """Collects mdiff output into separate lists
 
         Before storing the mdiff from/to data into a list, it is converted
         into a single line of text with HTML markup.
         """
-
-        fromlist,tolist,flaglist = [],[],[]
+        fromlist: list[str | None] = []
+        tolist: list[str | None] = []
+        flaglist: list[bool | None] = []
         # pull from/to data and flags from mdiff style iterator
         for fromdata,todata,flag in diffs:
-            try:
+            if flag is not None:
+                assert fromdata is not None
+                assert todata is not None
                 # store HTML markup of the lines into the lists
                 fromlist.append(self._format_line(0,flag,*fromdata))
                 tolist.append(self._format_line(1,flag,*todata))
-            except TypeError:
+            else:
                 # exceptions occur for lines where context separators go
                 fromlist.append(None)
                 tolist.append(None)
             flaglist.append(flag)
         return fromlist,tolist,flaglist
 
-    def _format_line(self,side,flag,linenum,text):
+    def _format_line(self,side: int, flag: bool, linenum: int | str, text: str) -> str:
         """Returns HTML markup of "from" / "to" text lines
 
         side -- 0 or 1 indicating "from" or "to" text
@@ -1864,10 +2012,10 @@ class HtmlDiff(object):
         linenum -- line number (used for line number column)
         text -- line text to be marked up
         """
-        try:
-            linenum = '%d' % linenum
+        linenum = str(linenum)
+        if linenum.isdigit():
             id = ' id="%s%s"' % (self._prefix[side],linenum)
-        except TypeError:
+        else:
             # handle blank lines where linenum is '>' or ''
             id = ''
         # replace those things that would get confused with HTML symbols
@@ -1879,7 +2027,7 @@ class HtmlDiff(object):
         return '<td class="diff_header"%s>%s</td><td nowrap="nowrap">%s</td>' \
                % (id,linenum,text)
 
-    def _make_prefix(self):
+    def _make_prefix(self) -> None:
         """Create unique anchor prefixes"""
 
         # Generate a unique anchor prefix so multiple tables
@@ -1890,7 +2038,15 @@ class HtmlDiff(object):
         # store prefixes so line format method has access
         self._prefix = [fromprefix,toprefix]
 
-    def _convert_flags(self,fromlist,tolist,flaglist,context,numlines):
+    def _convert_flags(
+        self,
+        fromlist: list[str | None],
+        tolist: list[str | None],
+        flaglist: list[bool | None],
+        context: bool,
+        numlines: int,
+    ) -> tuple[list[str | None], list[str | None], list[bool | None],
+               list[str], list[str]]:
         """Makes list of "next" links"""
 
         # all anchor names will be generated using the unique "to" prefix
@@ -1937,8 +2093,15 @@ class HtmlDiff(object):
 
         return fromlist,tolist,flaglist,next_href,next_id
 
-    def make_table(self,fromlines,tolines,fromdesc='',todesc='',context=False,
-                   numlines=5):
+    def make_table(
+        self,
+        fromlines: Lines,
+        tolines: Lines,
+        fromdesc: str = '',
+        todesc: str = '',
+        context: bool = False,
+        numlines: int = 5,
+    ) -> str:
         """Returns HTML table of side by side comparison with change highlights
 
         Arguments:
@@ -1965,7 +2128,7 @@ class HtmlDiff(object):
 
         # create diffs iterator which generates side by side from/to data
         if context:
-            context_lines = numlines
+            context_lines: int | None = numlines
         else:
             context_lines = None
         diffs = _mdiff(fromlines,tolines,context_lines,linejunk=self._linejunk,
@@ -2016,7 +2179,7 @@ class HtmlDiff(object):
 
 del re
 
-def restore(delta, which):
+def restore(delta: Iterable[str], which: int) -> Iterator[str]:
     r"""
     Generate one of the two sequences that generated a delta.
 
@@ -2047,10 +2210,3 @@ def restore(delta, which):
     for line in delta:
         if line[:2] in prefixes:
             yield line[2:]
-
-def _test():
-    import doctest, difflib
-    return doctest.testmod(difflib)
-
-if __name__ == "__main__":
-    _test()

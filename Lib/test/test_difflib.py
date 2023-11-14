@@ -441,7 +441,7 @@ class TestBytes(unittest.TestCase):
         self._assert_type_error(expect, context, a, b)
         self._assert_type_error(expect, context, b, a)
 
-        expect = "all arguments must be bytes, not str ('hello')"
+        expect = "bytes object expected; got str"
         self._assert_type_error(expect, difflib.diff_bytes, unified, a, b)
         self._assert_type_error(expect, difflib.diff_bytes, unified, b, a)
         self._assert_type_error(expect, difflib.diff_bytes, context, a, b)
@@ -456,7 +456,7 @@ class TestBytes(unittest.TestCase):
         fna = b'ol\xe9.txt'     # filename transcoded from ISO-8859-1
         fnb = b'ol\xc3a9.txt'   # to UTF-8
         self._assert_type_error(
-            "all arguments must be str, not: b'ol\\xe9.txt'",
+            "str object expected; got bytes",
             difflib.unified_diff, a, b, fna, fnb)
 
     def test_mixed_types_dates(self):
@@ -466,7 +466,7 @@ class TestBytes(unittest.TestCase):
         datea = '1 fév'
         dateb = '3 fév'
         self._assert_type_error(
-            "all arguments must be bytes, not str ('1 fév')",
+            "bytes object expected; got str",
             difflib.diff_bytes, difflib.unified_diff,
             a, b, b'a', b'b', datea, dateb)
 
