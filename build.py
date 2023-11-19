@@ -14,6 +14,7 @@ LIB_BASE_DIR = os.path.join(ROOT_DIR, "Lib")
 TEST_BASE_DIR = os.path.join(ROOT_DIR, "Lib/test")
 TMP_LIB_DIR = "/tmp/pycompiled"
 
+PACKAGE_VERSION = "0.2.0"
 SUPPORTED_LIBRARIES = ["tomllib", "difflib"]
 
 
@@ -178,13 +179,18 @@ def main() -> int:
         # setup.py contains the `pycompile` console script, present in `__init__.py`
         with contextlib.chdir(build_dir):
             setup_code = dedent(
+                # TODO: use a setup.cfg for README, version, and all the static stuff.
                 """
                 from setuptools import setup
 
                 setup(
                     name="compiled",
-                    version="0.0.2",
-                    description="compiled versions of the stdlib",
+                    version=%r,
+                    description="Compiled versions of the stdlib.",
+                    long_description="# compiled\n\nCompiled versions of the stdlib.",
+                    url="https://github.com/tusharsadhwani/astest",
+                    author="Tushar Sadhwani",
+                    author_email="tushar.sadhwani000@gmail.com",
                     packages=["compiled"],
                     package_data={"compiled": %r},
                     entry_points={
@@ -192,7 +198,7 @@ def main() -> int:
                     },
                 )
                 """
-                % (shared_objects,)
+                % (PACKAGE_VERSION, shared_objects,)
             )
             with open("./setup.py", "w") as setup_file:
                 setup_file.write(setup_code)
