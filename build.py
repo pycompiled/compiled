@@ -164,9 +164,18 @@ def main() -> int:
                 os.makedirs(dest_folder, exist_ok=True)
                 shutil.copy(shared_object, dest_path)
 
-        # Add a `__init__.py` perhaps?
-        open(os.path.join(compiled_src_path, "__init__.py"), "w").close()
+        # Add the `__init__.py` with console script to package
+        with open("./_compiled__init__.py") as init_file:
+            contents = init_file.read()
 
+        # Populate the supported libraries in the init file
+        contents = contents.replace(
+            "REPLACEABLE_MODULES = []", f"REPLACEABLE_MODULES = {SUPPORTED_LIBRARIES!r}"
+        )
+        with open(os.path.join(compiled_src_path, "__init__.py"), "w") as init_file:
+            init_file.write(contents)
+
+        # setup.py contains the `pycompile` console script, present in `__init__.py`
         with contextlib.chdir(build_dir):
             setup_code = dedent(
                 """
@@ -177,11 +186,13 @@ def main() -> int:
                     version="0.0.2",
                     description="compiled versions of the stdlib",
                     packages=["compiled"],
-                    package_data={
-                        "compiled": %r,
+                    package_data={"compiled": %r},
+                    entry_points={
+                        "console_scripts": ["pycompile=compiled:cli"],
                     },
                 )
-                """ % (shared_objects,)
+                """
+                % (shared_objects,)
             )
             with open("./setup.py", "w") as setup_file:
                 setup_file.write(setup_code)
