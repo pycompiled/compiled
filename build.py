@@ -180,7 +180,7 @@ def main() -> int:
         with contextlib.chdir(build_dir):
             setup_code = dedent(
                 # TODO: use a setup.cfg for README, version, and all the static stuff.
-                """
+                r"""
                 from setuptools import setup
 
                 setup(
