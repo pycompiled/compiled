@@ -35,7 +35,7 @@ jobs:
           python-version: 3.11
 
       - name: Install deps
-        run: python -m pip install cibuildwheel twine
+        run: python -m pip install cibuildwheel
 
       - name: Build wheels
         run: |
@@ -45,14 +45,14 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: builds-${{ matrix.builds.os }}
-          path: ./build/dist/*
+          path: ./build/wheelhouse/*.whl
 
       - name: Create GH release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: true
-          files: ./build/dist/*.whl
+          files: ./build/wheelhouse/*.whl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -62,4 +62,5 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
-          twine upload --skip-existing ./build/dist/*
+          python -m pip install twine
+          twine upload --skip-existing ./build/wheelhouse/*

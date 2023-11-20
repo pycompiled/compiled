@@ -6,6 +6,7 @@ description = "Compiled versions of the stdlib."
 authors = [
     {name = "Tushar Sadhwani", email = "tushar.sadhwani000@gmail.com"},
 ]
+# TODO: bump this down
 requires-python = ">=3.11"
 
 [project.urls]
