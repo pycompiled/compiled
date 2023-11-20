@@ -1,5 +1,6 @@
 #!/usr/bin/env python3.11
 import argparse
+import ast
 import contextlib
 import glob
 import os
@@ -14,8 +15,64 @@ LIB_BASE_DIR = os.path.join(ROOT_DIR, "Lib")
 TEST_BASE_DIR = os.path.join(ROOT_DIR, "Lib/test")
 TMP_LIB_DIR = "/tmp/pycompiled"
 
-PACKAGE_VERSION = "0.2.0"
+PACKAGE_VERSION = "0.2.1"
 SUPPORTED_LIBRARIES = ["tomllib", "difflib"]
+
+# get rid of this once mypyc fixes relative imports
+from _compiled__init__ import replace_import
+
+
+def rewrite_relative_imports(path: str, package_name: str) -> None:
+    """
+    Find all `from .foo import bar` imports and makeit absolute.
+    This is done because mypyc seems to break on relative imports.
+    """
+    if os.path.isdir(path):
+        python_files = glob.glob(f"{glob.escape(path)}/**/*.py", recursive=True)
+    else:
+        python_files = [path]
+
+    for python_file in python_files:
+        import_replacements: list[tuple[ast.ImportFrom], tuple[ast.ImportFrom]] = []
+        with open(python_file, "rb") as file:
+            source = file.read()
+
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+
+            if node.level == 0:
+                continue
+
+            if node.level > 1:
+                raise NotImplementedError(f"Unsupported import level: {node.level}")
+
+            # Relative import found, create compiled.<pkgname> import
+            absolure_module_name = (
+                f"compiled.{package_name}"
+                if node.module is None
+                else f"compiled.{package_name}.{node.module}"
+            )
+            replaement_node = ast.ImportFrom(
+                module=absolure_module_name,
+                names=node.names,
+                level=0,
+            )
+            import_replacements.append((node, replaement_node))
+
+        # Reverse them so that we can safely edit the source code going backwards
+        import_replacements = import_replacements[::-1]
+
+        sourcelines = source.splitlines(keepends=True)
+        for original_import, replacement_import in import_replacements:
+            replace_import(sourcelines, original_import, replacement_import)
+
+        new_source = b"".join(sourcelines)
+        with open(python_file, "wb") as file:
+            file.write(new_source)
+
+        print(f"NOTE: Rewrote {python_file} with absolute imports.")
 
 
 def run_test(test_path: str) -> int:
@@ -70,18 +127,28 @@ class CompiledNamespace:
     library: str
 
 
-def setup_library(library_name: str):
+def get_library_path(library_name: str) -> str:
     library_path = os.path.join(LIB_BASE_DIR, library_name + ".py")
     if not os.path.isfile(library_path):
         library_dir_path = os.path.join(LIB_BASE_DIR, library_name)
         if not os.path.isdir(library_dir_path):
-            print(
+            raise FileNotFoundError(
                 f"Library {library_path} not found. "
                 f"(Tried {library_path}, {library_dir_path})"
             )
-            return 1
 
         library_path = library_dir_path
+
+    return library_path
+
+
+def setup_library(library_name: str):
+    try:
+        library_path = get_library_path(library_name)
+    except FileNotFoundError as exc:
+        err_msg = exc.args[0]
+        print(f"Error in setting up {library_name}:", err_msg)
+        return 1
 
     if os.path.isfile(library_path):
         tmp_library_path = shutil.copy(library_path, TMP_LIB_DIR)
@@ -137,20 +204,6 @@ def main() -> int:
     os.makedirs(TMP_LIB_DIR)
 
     if args.subcommand == "package":
-        for library_name in SUPPORTED_LIBRARIES:
-            library_path, tmp_library_path, _ = setup_library(library_name)
-            returncode = run_mypyc(library_path)
-            if returncode != 0:
-                return returncode
-
-            delete_python_files_and_pycache(tmp_library_path)
-
-        # if we reached this far, we can just collect all *.so files and move them to
-        # ./build/compiled, and then run setuptools in root dir.
-        # but only after deleting build artifacts.
-        shutil.rmtree(os.path.join(TMP_LIB_DIR, "build"))
-        shared_objects = glob.glob("**/*.so", recursive=True, root_dir=TMP_LIB_DIR)
-
         build_dir = os.path.abspath("./build")
         if os.path.exists(build_dir):
             shutil.rmtree(build_dir)
@@ -158,12 +211,20 @@ def main() -> int:
         compiled_src_path = os.path.join(build_dir, "compiled")
         os.makedirs(compiled_src_path)
 
-        with contextlib.chdir(TMP_LIB_DIR):
-            for shared_object in shared_objects:
-                dest_path = os.path.join(compiled_src_path, shared_object)
-                dest_folder = os.path.dirname(dest_path)
-                os.makedirs(dest_folder, exist_ok=True)
-                shutil.copy(shared_object, dest_path)
+        for library_name in SUPPORTED_LIBRARIES:
+            library_path = get_library_path(library_name)
+            if os.path.isfile(library_path):
+                shutil.copy(library_path, compiled_src_path)
+            else:
+                library_folder = os.path.join(compiled_src_path, library_name)
+                shutil.copytree(library_path, library_folder)
+
+            # HACK: mypyc seems to not like relative imports in packages.
+            # so for now, replace relative imports with absolute ones.
+            rewrite_relative_imports(library_folder, library_name)
+
+        # Gets all relative paths to `setup.py`, i.e. `tomllib/__init__.py` etc.
+        ext_modules = glob.glob("**/*.py", recursive=True, root_dir=build_dir)
 
         # Add the `__init__.py` with console script to package
         with open("./_compiled__init__.py") as init_file:
@@ -171,7 +232,8 @@ def main() -> int:
 
         # Populate the supported libraries in the init file
         contents = contents.replace(
-            "REPLACEABLE_MODULES = []", f"REPLACEABLE_MODULES = {SUPPORTED_LIBRARIES!r}"
+            "REPLACEABLE_MODULES: list[str] = []",
+            f"REPLACEABLE_MODULES: list[str] = {SUPPORTED_LIBRARIES!r}",
         )
         with open(os.path.join(compiled_src_path, "__init__.py"), "w") as init_file:
             init_file.write(contents)
@@ -181,24 +243,26 @@ def main() -> int:
             setup_code = dedent(
                 # TODO: use a setup.cfg for README, version, and all the static stuff.
                 r"""
-                from setuptools import setup
+                from setuptools import setup, find_packages
+
+                from mypyc.build import mypycify
 
                 setup(
                     name="compiled",
                     version=%r,
                     description="Compiled versions of the stdlib.",
                     long_description="# compiled\n\nCompiled versions of the stdlib.",
-                    url="https://github.com/tusharsadhwani/astest",
+                    url="https://github.com/tusharsadhwani/compiled",
                     author="Tushar Sadhwani",
                     author_email="tushar.sadhwani000@gmail.com",
-                    packages=["compiled"],
-                    package_data={"compiled": %r},
+                    packages=find_packages(),
+                    ext_modules=mypycify(["--strict", *%r]),
                     entry_points={
                         "console_scripts": ["pycompile=compiled:cli"],
                     },
                 )
                 """
-                % (PACKAGE_VERSION, shared_objects,)
+                % (PACKAGE_VERSION, ext_modules)
             )
             with open("./setup.py", "w") as setup_file:
                 setup_file.write(setup_code)

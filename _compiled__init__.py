@@ -10,11 +10,10 @@ import argparse
 import ast
 import glob
 import os
-import typing
 
 
 # To be populated by `./build.py`
-REPLACEABLE_MODULES = []
+REPLACEABLE_MODULES: list[str] = []
 
 
 class PyCompiledArgs:
@@ -22,7 +21,7 @@ class PyCompiledArgs:
     ignore_errors: bool
 
 
-Import = typing.TypeVar("Import", ast.Import, ast.ImportFrom)
+Import = ast.Import | ast.ImportFrom
 
 
 def error(string: str) -> None:
@@ -35,7 +34,7 @@ def warning(string: str) -> None:
     print(f"\033[32;1mWARNING: {string}\033[m")
 
 
-def get_compileable_imports(tree: ast.Module) -> list[tuple[Import, Import]]:
+def get_compileable_imports(tree: ast.Module) -> tuple[list[Import], list[Import]]:
     """
     Finds all imports that can use the `compiled` module, and returns them
     as well as their replacement "compiled" imports.
@@ -46,7 +45,8 @@ def get_compileable_imports(tree: ast.Module) -> list[tuple[Import, Import]]:
         if not isinstance(node, (ast.Import, ast.ImportFrom)):
             continue
 
-        new_aliases = []
+        new_node: Import
+        new_aliases: list[ast.alias] = []
         if isinstance(node, ast.Import):
             if all(alias.name not in REPLACEABLE_MODULES for alias in node.names):
                 # No need to change this import
@@ -102,6 +102,7 @@ def replace_import(
 
     start_lineno, start_offset = original_import.lineno, original_import.col_offset
     end_lineno, end_offset = original_import.end_lineno, original_import.end_col_offset
+    assert end_lineno is not None
 
     # make the line numbers zero indexed to match sourcelines
     start_lineno -= 1
@@ -135,7 +136,6 @@ def cli(argv: list[str] | None = None) -> int:
 
     if os.path.isdir(args.path):
         python_files = glob.glob("**/*.py", recursive=True, root_dir=args.path)
-        print(python_files)
     else:
         python_files = [args.path]
 
