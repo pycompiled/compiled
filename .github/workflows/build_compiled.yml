@@ -23,22 +23,37 @@ jobs:
         ]
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
+
       - name: Install deps
         run: python -m pip install mypy[mypyc] wheel twine
       - name: Build wheels
         run: python build.py package
-      # - name: Publish
-      #   env:
-      #     TWINE_USERNAME: __token__
-      #     TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-      #   run: |
-      #     twine upload --skip-existing wheelhouse/*
+
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
-          name: wheel-${{ matrix.builds.os }}
-          path: ./build/dist/*.whl
+          name: builds-${{ matrix.builds.os }}
+          path: ./build/dist/*
+
+      - name: Create GH release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true
+          files: |
+            ${{ steps.bin.outputs.BIN_PATH }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish on PyPI
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          twine upload --skip-existing ./build/dist/*
