@@ -1,0 +1,47 @@
+name: Build compiled package
+
+# gh-84728: "paths-ignore" is not used to skip documentation-only PRs, because
+# it prevents to mark a job as mandatory. A PR cannot be merged if a job is
+# mandatory but not scheduled because of "paths-ignore".
+on:
+  workflow_dispatch:
+  push:
+    branches:
+    - 'compiled-3.11'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ${{ matrix.builds.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        builds: [
+          {os: "macos-latest", python_requires: ">=3.7.0"},
+          {os: "windows-latest", python_requires: ">=3.7.0"},
+          {os: "ubuntu-latest", python_requires: ">=3.7.0"}
+        ]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+      - name: Install deps
+        run: python -m pip install mypy[mypyc] twine
+      - name: Build wheels
+        run: ./build.py package
+      # - name: Publish
+      #   env:
+      #     TWINE_USERNAME: __token__
+      #     TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+      #   run: |
+      #     twine upload --skip-existing wheelhouse/*
+      - name: Upload wheels
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-${{ matrix.builds.os }}
+          path: ./build/dist/*.whl
