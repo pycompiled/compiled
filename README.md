@@ -50,6 +50,22 @@ difference in speed:
 
 [1]: ./compiled_examples/hashes.py
 
+## How does it work?
+
+It uses this awesome piece of software called [mypyc](https://github.com/mypyc/mypyc)
+which takes type-checked Python code and compiles it to C code, which is generally
+faster.
+
+Simply making sure that the Python module is statically type checked is 95% of the
+work needed to be done to make the project work. The rest is just glue code to test
+the compiled code and package it.
+
+### Help wanted!
+
+Currently only two modules have been migrated: `tomllib` and `difflib`.
+
+PRs type checking other Python modules are welcome!
+
 ## Local Development / Testing
 
 - Create and activate a virtual environment.
