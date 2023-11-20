@@ -238,6 +238,9 @@ def main() -> int:
         with open(os.path.join(compiled_src_path, "__init__.py"), "w") as init_file:
             init_file.write(contents)
 
+        # copy cibuildwheel config to build dir
+        shutil.copy("./cibw_config.toml", build_dir)            
+
         # setup.py contains the `pycompile` console script, present in `__init__.py`
         with contextlib.chdir(build_dir):
             setup_code = dedent(
