@@ -262,7 +262,13 @@ def main() -> int:
             with open("./setup.py", "w") as setup_file:
                 setup_file.write(setup_code)
 
-            process = subprocess.run(["cibuildwheel"])
+            if os.getenv('GITHUB_ACTIONS') == 'true':
+                # Running in CI, use cibuildwheel
+                process = subprocess.run(["cibuildwheel"])
+            else:
+                # Running locally, build a regular bdist_wheel
+                process = subprocess.run(["python", "setup.py", "bdist_wheel"])
+
             return process.returncode
 
     library_name = args.library
