@@ -3,8 +3,10 @@ name: Build compiled package
 on:
   workflow_dispatch:
   push:
+    tags:
+    - "compiled-v*"
     branches:
-    - 'compiled-3.11'
+    - 'compiled-*'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
