@@ -35,9 +35,12 @@ jobs:
           python-version: 3.11
 
       - name: Install deps
-        run: python -m pip install mypy[mypyc] wheel twine
+        run: python -m pip install mypy[mypyc] wheel auditwheel twine
+
       - name: Build wheels
-        run: python build.py package
+        run: |
+          python build.py package
+          auditwheel repair ./build/dist/*.whl
 
       - name: Upload wheels
         uses: actions/upload-artifact@v3
@@ -50,8 +53,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: true
-          files: |
-            ${{ steps.bin.outputs.BIN_PATH }}
+          files: ./build/dist/*.whl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
