@@ -267,7 +267,7 @@ def main() -> int:
             with open("./setup.py", "w") as setup_file:
                 setup_file.write(setup_code)
 
-            process = subprocess.run(["cibuildwheel"])
+            process = subprocess.run(["cibuildwheel", "--config-file=cibw_config.toml"])
             return process.returncode
 
     library_name = args.library
