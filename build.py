@@ -15,7 +15,6 @@ LIB_BASE_DIR = os.path.join(ROOT_DIR, "Lib")
 TEST_BASE_DIR = os.path.join(ROOT_DIR, "Lib/test")
 TMP_LIB_DIR = "/tmp/pycompiled"
 
-PACKAGE_VERSION = "0.2.1"
 SUPPORTED_LIBRARIES = ["tomllib", "difflib"]
 
 # get rid of this once mypyc fixes relative imports
@@ -239,25 +238,18 @@ def main() -> int:
             init_file.write(contents)
 
         # copy cibuildwheel config to build dir
-        shutil.copy("./cibw_config.toml", build_dir)            
+        pyproject_toml_path = os.path.join(build_dir, "pyproject.toml")
+        shutil.copy("./_compiled_pyproject.toml", pyproject_toml_path)
 
         # setup.py contains the `pycompile` console script, present in `__init__.py`
         with contextlib.chdir(build_dir):
             setup_code = dedent(
-                # TODO: use a setup.cfg for README, version, and all the static stuff.
                 r"""
                 from setuptools import setup, find_packages
 
                 from mypyc.build import mypycify
 
                 setup(
-                    name="compiled",
-                    version=%r,
-                    description="Compiled versions of the stdlib.",
-                    long_description="# compiled\n\nCompiled versions of the stdlib.",
-                    url="https://github.com/tusharsadhwani/compiled",
-                    author="Tushar Sadhwani",
-                    author_email="tushar.sadhwani000@gmail.com",
                     packages=find_packages(),
                     ext_modules=mypycify(["--strict", *%r]),
                     entry_points={
@@ -265,12 +257,12 @@ def main() -> int:
                     },
                 )
                 """
-                % (PACKAGE_VERSION, ext_modules)
+                % (ext_modules,)
             )
             with open("./setup.py", "w") as setup_file:
                 setup_file.write(setup_code)
 
-            process = subprocess.run(["cibuildwheel", "--config-file=cibw_config.toml"])
+            process = subprocess.run(["cibuildwheel"])
             return process.returncode
 
     library_name = args.library
