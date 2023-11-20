@@ -267,7 +267,7 @@ def main() -> int:
             with open("./setup.py", "w") as setup_file:
                 setup_file.write(setup_code)
 
-            process = subprocess.run(["python", "setup.py", "sdist", "bdist_wheel"])
+            process = subprocess.run(["cibuildwheel"])
             return process.returncode
 
     library_name = args.library

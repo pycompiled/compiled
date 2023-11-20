@@ -35,7 +35,7 @@ jobs:
           python-version: 3.11
 
       - name: Install deps
-        run: python -m pip install mypy[mypyc] wheel auditwheel twine
+        run: python -m pip install mypy[mypyc] cibuildwheel twine
 
       - name: Build wheels
         run: |
