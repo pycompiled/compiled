@@ -237,6 +237,9 @@ def main() -> int:
         with open(os.path.join(compiled_src_path, "__init__.py"), "w") as init_file:
             init_file.write(contents)
 
+        # copy README.md to build dir
+        shutil.copy("./README.md", build_dir)
+
         # copy cibuildwheel config to build dir
         pyproject_toml_path = os.path.join(build_dir, "pyproject.toml")
         shutil.copy("./_compiled_pyproject.toml", pyproject_toml_path)

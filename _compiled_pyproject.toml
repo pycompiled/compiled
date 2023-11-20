@@ -1,13 +1,25 @@
 [project]
 name = "compiled"
 version = "0.2.1"
-description = "Compiled versions of the stdlib."
-# TODO: Add README
+description = "Compiled versions of the Python standard library."
 authors = [
     {name = "Tushar Sadhwani", email = "tushar.sadhwani000@gmail.com"},
 ]
+license = {text = "PSF license"}
+classifiers = [
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+]
 # TODO: bump this down
 requires-python = ">=3.11"
+dynamic = ['readme']
 
 [project.urls]
 Homepage = "https://github.com/tusharsadhwani/compiled"
@@ -22,3 +34,6 @@ requires = [
     "mypy[mypyc]",
 ]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+readme = {file = "README.md", content-type = "text/markdown"}
