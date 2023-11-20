@@ -40,4 +40,5 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
+          name: wheel-${{ matrix.builds.os }}
           path: ./build/dist/*.whl
