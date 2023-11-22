@@ -470,7 +470,6 @@ def merge(*iterables: Iterable[Union[Tuple[Any, ...], List[Any]]], key: Optional
 # 3) Made more comparisons in common cases (small k, large n, semi-random input).
 # See the more detailed comparison of approach at:
 # http://code.activestate.com/recipes/577573-compare-algorithms-for-heapqsmallest
-
 def nsmallest(n: int, iterable: Collection[Any], key: Optional[Callable[[Any], Any]] = None) -> List[Any]:
     """Find the n smallest elements in a dataset.
 
