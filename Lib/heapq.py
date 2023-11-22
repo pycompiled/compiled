@@ -126,15 +126,24 @@ Believe me, real good tape sorts were quite spectacular to watch!
 From all times, sorting has always been a Great Art! :-)
 """
 
+from typing import Any, Callable, Iterable, List, Optional, Collection, Union, TypeVar, Protocol, Tuple
+
+class Comparable(Protocol):
+    def __lt__(self, other: object) -> bool:
+        ...
+
+T = TypeVar('T',Tuple[Any, int, Any], Tuple[Any, int],List[Any])
+
+
 __all__ = ['heappush', 'heappop', 'heapify', 'heapreplace', 'merge',
            'nlargest', 'nsmallest', 'heappushpop']
 
-def heappush(heap, item):
+def heappush(heap: List[T], item: T) -> None:
     """Push item onto heap, maintaining the heap invariant."""
     heap.append(item)
     _siftdown(heap, 0, len(heap)-1)
 
-def heappop(heap):
+def heappop(heap:   List[T]) -> T:
     """Pop the smallest item off the heap, maintaining the heap invariant."""
     lastelt = heap.pop()    # raises appropriate IndexError if heap is empty
     if heap:
@@ -144,7 +153,7 @@ def heappop(heap):
         return returnitem
     return lastelt
 
-def heapreplace(heap, item):
+def heapreplace(heap: List[T], item: T) -> T:
     """Pop and return the current smallest value, and add the new item.
 
     This is more efficient than heappop() followed by heappush(), and can be
@@ -160,14 +169,14 @@ def heapreplace(heap, item):
     _siftup(heap, 0)
     return returnitem
 
-def heappushpop(heap, item):
+def heappushpop(heap: List[T], item: T) -> T:
     """Fast version of a heappush followed by a heappop."""
     if heap and heap[0] < item:
         item, heap[0] = heap[0], item
         _siftup(heap, 0)
     return item
 
-def heapify(x):
+def heapify(x: List[T]) -> None:
     """Transform list into a heap, in-place, in O(len(x)) time."""
     n = len(x)
     # Transform bottom-up.  The largest index there's any point to looking at
@@ -178,7 +187,7 @@ def heapify(x):
     for i in reversed(range(n//2)):
         _siftup(x, i)
 
-def _heappop_max(heap):
+def _heappop_max(heap: List[T]) -> T:
     """Maxheap version of a heappop."""
     lastelt = heap.pop()    # raises appropriate IndexError if heap is empty
     if heap:
@@ -188,14 +197,14 @@ def _heappop_max(heap):
         return returnitem
     return lastelt
 
-def _heapreplace_max(heap, item):
+def _heapreplace_max(heap: List[T], item: T) -> T:
     """Maxheap version of a heappop followed by a heappush."""
     returnitem = heap[0]    # raises appropriate IndexError if heap is empty
     heap[0] = item
     _siftup_max(heap, 0)
     return returnitem
 
-def _heapify_max(x):
+def _heapify_max(x: List[T]) -> None:
     """Transform list into a maxheap, in-place, in O(len(x)) time."""
     n = len(x)
     for i in reversed(range(n//2)):
@@ -204,7 +213,7 @@ def _heapify_max(x):
 # 'heap' is a heap at all indices >= startpos, except possibly for pos.  pos
 # is the index of a leaf with a possibly out-of-order value.  Restore the
 # heap invariant.
-def _siftdown(heap, startpos, pos):
+def _siftdown(heap: List[T], startpos: int, pos: int) -> None:
     newitem = heap[pos]
     # Follow the path to the root, moving parents down until finding a place
     # newitem fits.
@@ -257,7 +266,7 @@ def _siftdown(heap, startpos, pos):
 # heappop() compares):  list.sort() is (unsurprisingly!) more efficient
 # for sorting.
 
-def _siftup(heap, pos):
+def _siftup(heap: List[T], pos: int) -> None:
     endpos = len(heap)
     startpos = pos
     newitem = heap[pos]
@@ -277,7 +286,7 @@ def _siftup(heap, pos):
     heap[pos] = newitem
     _siftdown(heap, startpos, pos)
 
-def _siftdown_max(heap, startpos, pos):
+def _siftdown_max(heap: List[T], startpos: int, pos: int) -> None:
     'Maxheap variant of _siftdown'
     newitem = heap[pos]
     # Follow the path to the root, moving parents down until finding a place
@@ -292,7 +301,7 @@ def _siftdown_max(heap, startpos, pos):
         break
     heap[pos] = newitem
 
-def _siftup_max(heap, pos):
+def _siftup_max(heap: List[T], pos: int) -> None:
     'Maxheap variant of _siftup'
     endpos = len(heap)
     startpos = pos
@@ -313,7 +322,8 @@ def _siftup_max(heap, pos):
     heap[pos] = newitem
     _siftdown_max(heap, startpos, pos)
 
-def merge(*iterables, key=None, reverse=False):
+
+def merge(*iterables: Iterable[Union[Tuple[Any, ...], List[Any]]], key: Optional[Callable[[Any], Any]] = None, reverse: bool = False) -> Iterable[Any]:
     '''Merge multiple sorted inputs into a single sorted output.
 
     Similar to sorted(itertools.chain(*iterables)) but returns a generator,
@@ -331,7 +341,7 @@ def merge(*iterables, key=None, reverse=False):
 
     '''
 
-    h = []
+    h: List[List[Any]]= []
     h_append = h.append
 
     if reverse:
@@ -348,6 +358,7 @@ def merge(*iterables, key=None, reverse=False):
     if key is None:
         for order, it in enumerate(map(iter, iterables)):
             try:
+                print(type(it))
                 next = it.__next__
                 h_append([next(), order * direction, next])
             except StopIteration:
@@ -460,7 +471,7 @@ def merge(*iterables, key=None, reverse=False):
 # See the more detailed comparison of approach at:
 # http://code.activestate.com/recipes/577573-compare-algorithms-for-heapqsmallest
 
-def nsmallest(n, iterable, key=None):
+def nsmallest(n: int, iterable: Collection[Any], key: Optional[Callable[[Any], Any]] = None) -> List[Any]:
     """Find the n smallest elements in a dataset.
 
     Equivalent to:  sorted(iterable, key=key)[:n]
@@ -520,7 +531,7 @@ def nsmallest(n, iterable, key=None):
     result.sort()
     return [elem for (k, order, elem) in result]
 
-def nlargest(n, iterable, key=None):
+def nlargest(n: int, iterable: Collection[Any], key: Optional[Callable[[Any], Any]] = None) -> List[Any]:
     """Find the n largest elements in a dataset.
 
     Equivalent to:  sorted(iterable, key=key, reverse=True)[:n]
