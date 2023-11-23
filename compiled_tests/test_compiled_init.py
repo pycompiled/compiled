@@ -3,6 +3,8 @@ import os.path
 import tempfile
 import types
 
+import build
+import _compiled__init__ as compiled_cli
 
 TEST_SOURCE = r"""
 import sys
@@ -60,24 +62,12 @@ for name in namees:
     print("Similar hashes:", hash, match)
 """
 
-
-def import_from_root(filename: str) -> types.ModuleType:
-    root_dir = os.path.dirname(os.path.dirname(__file__))
-    module_path = os.path.join(root_dir, filename)
-    spec = importlib.util.spec_from_file_location(filename, module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def test_cli():
     test_file = os.path.join(tempfile.gettempdir(), "test_file.py")
     with open(test_file, "w") as file:
         file.write(TEST_SOURCE)
 
     # patch the replaceable modules by putting the values from `build.py`
-    build = import_from_root("build.py")
-    compiled_cli = import_from_root("_compiled__init__.py")
     compiled_cli.REPLACEABLE_MODULES = build.SUPPORTED_LIBRARIES
 
     try:
