@@ -77,7 +77,7 @@ def rewrite_relative_imports(path: str, package_name: str) -> None:
 def run_test(test_path: str) -> int:
     test_relative_path = os.path.relpath(test_path, TMP_LIB_DIR)
     with contextlib.chdir(TMP_LIB_DIR):
-        file_command = [sys.executable, "-m" "unittest", test_relative_path]
+        file_command = [sys.executable, "-m", "unittest", test_relative_path]
         folder_command = [
             sys.executable,
             "-m",
