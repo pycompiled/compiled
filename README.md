@@ -60,11 +60,20 @@ Simply making sure that the Python module is statically type checked is 95% of t
 work needed to be done to make the project work. The rest is just glue code to test
 the compiled code and package it.
 
-### Help wanted!
+### Supported libraries
 
-Currently only two modules have been migrated: `tomllib` and `difflib`.
+| Library    | Supported |
+| ---------- | :-------: |
+| `tomllib`  |    ✅     |
+| `difflib`  |    ✅     |
+| `asyncio`  |    ⬜️    |
+| `urllib`   |    ⬜️    |
+| `zipfile`  |    ⬜️    |
+| `argparse` |    ⬜️    |
+| `uuid`     |    ⬜️    |
 
-PRs type checking other Python modules are welcome!
+**PRs type checking other Python modules are welcome!**
+Check the [How to add a library](#how-to-add-a-library) section on the exact steps.
 
 ## Local Development / Testing
 
@@ -89,3 +98,16 @@ PRs type checking other Python modules are welcome!
   ```
 
 - Run `pytest compiled_tests` to run tests.
+
+### How to add a library
+
+Say you wanted to add the `heapq` library to the project. The steps will be as follows:
+
+- verify `./build.py test heapq` passes. This will run the CPython test suite on the existing code.
+- Tweak the code and add annotations until `./build.py mypy heapq` passes.
+
+  Verify `./build.py test heapq` still passes.
+- Tweak the code until `./build.py mypyc heapq` passes.
+
+  Verify `./build.py test heapq` still passes.
+- Run `./build.py test_compiled heapq` to ensure the compiled version still passes all tests.
