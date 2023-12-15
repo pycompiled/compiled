@@ -1,7 +1,7 @@
 """Finds similar SHA1's in the poetry.lock file."""
 import sys
-import compiled.difflib as difflib
-import compiled.tomllib as tomllib
+import difflib
+import tomllib
 
 filepath = sys.argv[1]
 with open(filepath, "rb") as file:
