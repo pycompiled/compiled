@@ -118,7 +118,8 @@ def delete_python_files_and_pycache(library_path: str) -> None:
                 os.remove(os.path.join(library_path, file))
 
     # delete pycache
-    shutil.rmtree(pycache_path)
+    if os.path.exists(pycache_path):
+        shutil.rmtree(pycache_path)
 
 
 class CompiledNamespace:

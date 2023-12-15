@@ -44,10 +44,12 @@ Typical usage:
     UUID('00010203-0405-0607-0809-0a0b0c0d0e0f')
 """
 
+import io
 import os
 import sys
 
-from enum import Enum, _simple_enum
+from enum import Enum
+from typing import Any, Callable, Container, Iterable
 
 
 __author__ = 'Ka-Ping Yee <ping@zesty.ca>'
@@ -75,8 +77,7 @@ int_ = int      # The built-in int type
 bytes_ = bytes  # The built-in bytes type
 
 
-@_simple_enum(Enum)
-class SafeUUID:
+class SafeUUID(Enum):
     safe = 0
     unsafe = -1
     unknown = None
@@ -136,9 +137,11 @@ class UUID:
 
     __slots__ = ('int', 'is_safe', '__weakref__')
 
-    def __init__(self, hex=None, bytes=None, bytes_le=None, fields=None,
-                       int=None, version=None,
-                       *, is_safe=SafeUUID.unknown):
+    def __init__(self, hex: str | None = None, bytes: bytes_ | None = None,
+                 bytes_le: bytes_ | None = None,
+                 fields: tuple[int, int, int, int, int, int] | None = None,
+                 int: int_ | None = None, version: int | None = None,
+                 *, is_safe: SafeUUID = SafeUUID.unknown) -> None:
         r"""Create a UUID from either a string of 32 hexadecimal digits,
         a string of 16 bytes as the 'bytes' argument, a string of 16 bytes
         in little-endian order as the 'bytes_le' argument, a tuple of six
@@ -152,7 +155,7 @@ class UUID:
         UUID('{12345678-1234-5678-1234-567812345678}')
         UUID('12345678123456781234567812345678')
         UUID('urn:uuid:12345678-1234-5678-1234-567812345678')
-        UUID(bytes='\x12\x34\x56\x78'*4)
+        UUID(bytes=b'\x12\x34\x56\x78'*4)
         UUID(bytes_le='\x78\x56\x34\x12\x34\x12\x78\x56' +
                       '\x12\x34\x56\x78\x12\x34\x56\x78')
         UUID(fields=(0x12345678, 0x1234, 0x5678, 0x12, 0x34, 0x567812345678))
@@ -210,6 +213,8 @@ class UUID:
         if int is not None:
             if not 0 <= int < 1<<128:
                 raise ValueError('int is out of range (need a 128-bit value)')
+        else:
+            raise ValueError('int is None')
         if version is not None:
             if not 1 <= version <= 5:
                 raise ValueError('illegal version number')
@@ -221,8 +226,10 @@ class UUID:
             int |= version << 76
         object.__setattr__(self, 'int', int)
         object.__setattr__(self, 'is_safe', is_safe)
+        self.int: int_
+        self.is_safe: SafeUUID
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, int]:
         d = {'int': self.int}
         if self.is_safe != SafeUUID.unknown:
             # is_safe is a SafeUUID instance.  Return just its value, so that
@@ -230,14 +237,14 @@ class UUID:
             d['is_safe'] = self.is_safe.value
         return d
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: dict[str, int | SafeUUID]) -> None:
         object.__setattr__(self, 'int', state['int'])
         # is_safe was added in 3.7; it is also omitted when it is "unknown"
         object.__setattr__(self, 'is_safe',
                            SafeUUID(state['is_safe'])
                            if 'is_safe' in state else SafeUUID.unknown)
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         if isinstance(other, UUID):
             return self.int == other.int
         return NotImplemented
@@ -245,102 +252,102 @@ class UUID:
     # Q. What's the value of being able to sort UUIDs?
     # A. Use them as keys in a B-Tree or similar mapping.
 
-    def __lt__(self, other):
+    def __lt__(self, other: Any) -> bool:
         if isinstance(other, UUID):
             return self.int < other.int
         return NotImplemented
 
-    def __gt__(self, other):
+    def __gt__(self, other: Any) -> bool:
         if isinstance(other, UUID):
-            return self.int > other.int
+            return bool(self.int > other.int)
         return NotImplemented
 
-    def __le__(self, other):
+    def __le__(self, other: Any) -> bool:
         if isinstance(other, UUID):
-            return self.int <= other.int
+            return bool(self.int <= other.int)
         return NotImplemented
 
-    def __ge__(self, other):
+    def __ge__(self, other: Any) -> bool:
         if isinstance(other, UUID):
-            return self.int >= other.int
+            return bool(self.int >= other.int)
         return NotImplemented
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.int)
 
-    def __int__(self):
+    def __int__(self) -> int:
         return self.int
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '%s(%r)' % (self.__class__.__name__, str(self))
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: Any) -> None:
         raise TypeError('UUID objects are immutable')
 
-    def __str__(self):
+    def __str__(self) -> str:
         hex = '%032x' % self.int
         return '%s-%s-%s-%s-%s' % (
             hex[:8], hex[8:12], hex[12:16], hex[16:20], hex[20:])
 
     @property
-    def bytes(self):
+    def bytes(self) -> bytes_:
         return self.int.to_bytes(16)  # big endian
 
     @property
-    def bytes_le(self):
+    def bytes_le(self) -> bytes_:
         bytes = self.bytes
         return (bytes[4-1::-1] + bytes[6-1:4-1:-1] + bytes[8-1:6-1:-1] +
                 bytes[8:])
 
     @property
-    def fields(self):
+    def fields(self) -> tuple[int, int, int, int, int, int]:
         return (self.time_low, self.time_mid, self.time_hi_version,
                 self.clock_seq_hi_variant, self.clock_seq_low, self.node)
 
     @property
-    def time_low(self):
-        return self.int >> 96
+    def time_low(self) -> int:
+        return int(self.int >> 96)
 
     @property
-    def time_mid(self):
-        return (self.int >> 80) & 0xffff
+    def time_mid(self) -> int:
+        return int((self.int >> 80) & 0xffff)
 
     @property
-    def time_hi_version(self):
-        return (self.int >> 64) & 0xffff
+    def time_hi_version(self) -> int:
+        return int((self.int >> 64) & 0xffff)
 
     @property
-    def clock_seq_hi_variant(self):
-        return (self.int >> 56) & 0xff
+    def clock_seq_hi_variant(self) -> int:
+        return int((self.int >> 56) & 0xff)
 
     @property
-    def clock_seq_low(self):
-        return (self.int >> 48) & 0xff
+    def clock_seq_low(self) -> int:
+        return int((self.int >> 48) & 0xff)
 
     @property
-    def time(self):
+    def time(self) -> int:
         return (((self.time_hi_version & 0x0fff) << 48) |
                 (self.time_mid << 32) | self.time_low)
 
     @property
-    def clock_seq(self):
+    def clock_seq(self) -> int:
         return (((self.clock_seq_hi_variant & 0x3f) << 8) |
                 self.clock_seq_low)
 
     @property
-    def node(self):
+    def node(self) -> int:
         return self.int & 0xffffffffffff
 
     @property
-    def hex(self):
+    def hex(self) -> str:
         return '%032x' % self.int
 
     @property
-    def urn(self):
+    def urn(self) -> str:
         return 'urn:uuid:' + str(self)
 
     @property
-    def variant(self):
+    def variant(self) -> str:
         if not self.int & (0x8000 << 48):
             return RESERVED_NCS
         elif not self.int & (0x4000 << 48):
@@ -351,18 +358,21 @@ class UUID:
             return RESERVED_FUTURE
 
     @property
-    def version(self):
+    def version(self) -> int | None:
         # The version bits are only meaningful for RFC 4122 UUIDs.
         if self.variant == RFC_4122:
             return int((self.int >> 76) & 0xf)
+        return None
 
 
-def _get_command_stdout(command, *args):
+def _get_command_stdout(command: str | bytes | os.PathLike[Any],
+                        *args: Any) -> io.BytesIO | None:
     import io, os, shutil, subprocess
 
     try:
         path_dirs = os.environ.get('PATH', os.defpath).split(os.pathsep)
         path_dirs.extend(['/sbin', '/usr/sbin'])
+        executable: str | bytes | os.PathLike[Any] | None
         executable = shutil.which(command, path=os.pathsep.join(path_dirs))
         if executable is None:
             return None
@@ -373,10 +383,10 @@ def _get_command_stdout(command, *args):
         env['LC_ALL'] = 'C'
         # Empty strings will be quoted by popen so we should just ommit it
         if args != ('',):
-            command = (executable, *args)
+            popen_command: tuple[Any, ...] = (executable, *args)
         else:
-            command = (executable,)
-        proc = subprocess.Popen(command,
+            popen_command = (executable,)
+        proc = subprocess.Popen(popen_command,
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.DEVNULL,
                                 env=env)
@@ -403,11 +413,13 @@ def _get_command_stdout(command, *args):
 #
 # See https://en.wikipedia.org/wiki/MAC_address#Universal_vs._local
 
-def _is_universal(mac):
+def _is_universal(mac: int) -> bool:
     return not (mac & (1 << 41))
 
 
-def _find_mac_near_keyword(command, args, keywords, get_word_index):
+def _find_mac_near_keyword(command: str | bytes | os.PathLike[Any], args: Any,
+                           keywords: Container[str | bytes],
+                           get_word_index: Callable[[int], int]) -> int | None:
     """Searches a command's output for a MAC address near a keyword.
 
     Each line of words in the output is case-insensitively searched for
@@ -420,7 +432,7 @@ def _find_mac_near_keyword(command, args, keywords, get_word_index):
     if stdout is None:
         return None
 
-    first_local_mac = None
+    first_local_mac: int | None = None
     for line in stdout:
         words = line.lower().rstrip().split()
         for i in range(len(words)):
@@ -442,7 +454,7 @@ def _find_mac_near_keyword(command, args, keywords, get_word_index):
     return first_local_mac or None
 
 
-def _parse_mac(word):
+def _parse_mac(word: bytes) -> int | None:
     # Accept 'HH:HH:HH:HH:HH:HH' MAC address (ex: '52:54:00:9d:0e:67'),
     # but reject IPv6 address (ex: 'fe80::5054:ff:fe9' or '123:2:3:4:5:6:7:8').
     #
@@ -451,26 +463,28 @@ def _parse_mac(word):
     # by dashes. These should be ignored in favor of a real MAC address
     parts = word.split(_MAC_DELIM)
     if len(parts) != 6:
-        return
+        return None
     if _MAC_OMITS_LEADING_ZEROES:
         # (Only) on AIX the macaddr value given is not prefixed by 0, e.g.
         # en0   1500  link#2      fa.bc.de.f7.62.4 110854824     0 160133733     0     0
         # not
         # en0   1500  link#2      fa.bc.de.f7.62.04 110854824     0 160133733     0     0
         if not all(1 <= len(part) <= 2 for part in parts):
-            return
-        hexstr = b''.join(part.rjust(2, b'0') for part in parts)
+            return None
+        hexstr: bytes_ = b''.join(part.rjust(2, b'0') for part in parts)
     else:
         if not all(len(part) == 2 for part in parts):
-            return
+            return None
         hexstr = b''.join(parts)
     try:
         return int(hexstr, 16)
     except ValueError:
-        return
+        return None
 
 
-def _find_mac_under_heading(command, args, heading):
+def _find_mac_under_heading(command: str | bytes | os.PathLike[Any],
+                            args: Iterable[Any],
+                            heading: bytes) -> int | None:
     """Looks for a MAC address under a heading in a command's output.
 
     The first line of words in the output is searched for the given
@@ -487,7 +501,7 @@ def _find_mac_under_heading(command, args, heading):
     except ValueError:
         return None
 
-    first_local_mac = None
+    first_local_mac: int | None = None
     for line in stdout:
         words = line.rstrip().split()
         try:
@@ -508,7 +522,7 @@ def _find_mac_under_heading(command, args, heading):
 
 # The following functions call external programs to 'get' a macaddr value to
 # be used as basis for an uuid
-def _ifconfig_getnode():
+def _ifconfig_getnode() -> int | None:
     """Get the hardware address on Unix by running ifconfig."""
     # This works on Linux ('' or '-a'), Tru64 ('-av'), but not all Unixes.
     keywords = (b'hwaddr', b'ether', b'address:', b'lladdr')
@@ -518,7 +532,7 @@ def _ifconfig_getnode():
             return mac
     return None
 
-def _ip_getnode():
+def _ip_getnode() -> int | None:
     """Get the hardware address on Unix by running ip."""
     # This works on Linux with iproute2.
     mac = _find_mac_near_keyword('ip', 'link', [b'link/ether'], lambda i: i+1)
@@ -526,7 +540,7 @@ def _ip_getnode():
         return mac
     return None
 
-def _arp_getnode():
+def _arp_getnode() -> int | None:
     """Get the hardware address on Unix by running arp."""
     import os, socket
     if not hasattr(socket, "gethostbyname"):
@@ -554,22 +568,22 @@ def _arp_getnode():
         return mac
     return None
 
-def _lanscan_getnode():
+def _lanscan_getnode() -> int | None:
     """Get the hardware address on Unix by running lanscan."""
     # This might work on HP-UX.
     return _find_mac_near_keyword('lanscan', '-ai', [b'lan0'], lambda i: 0)
 
-def _netstat_getnode():
+def _netstat_getnode() -> int | None:
     """Get the hardware address on Unix by running netstat."""
     # This works on AIX and might work on Tru64 UNIX.
     return _find_mac_under_heading('netstat', '-ian', b'Address')
 
-def _ipconfig_getnode():
+def _ipconfig_getnode() -> int | None:
     """[DEPRECATED] Get the hardware address on Windows."""
     # bpo-40501: UuidCreateSequential() is now the only supported approach
     return _windll_getnode()
 
-def _netbios_getnode():
+def _netbios_getnode() -> int | None:
     """[DEPRECATED] Get the hardware address on Windows."""
     # bpo-40501: UuidCreateSequential() is now the only supported approach
     return _windll_getnode()
@@ -577,7 +591,7 @@ def _netbios_getnode():
 
 # Import optional C extension at toplevel, to help disabling it when testing
 try:
-    import _uuid
+    import _uuid  # type: ignore
     _generate_time_safe = getattr(_uuid, "generate_time_safe", None)
     _UuidCreate = getattr(_uuid, "UuidCreate", None)
     _has_uuid_generate_time_safe = _uuid.has_uuid_generate_time_safe
@@ -588,23 +602,25 @@ except ImportError:
     _has_uuid_generate_time_safe = None
 
 
-def _load_system_functions():
+def _load_system_functions() -> None:
     """[DEPRECATED] Platform-specific functions loaded at import time"""
 
 
-def _unix_getnode():
+def _unix_getnode() -> int | None:
     """Get the hardware address on Unix using the _uuid extension module."""
     if _generate_time_safe:
         uuid_time, _ = _generate_time_safe()
         return UUID(bytes=uuid_time).node
+    return None
 
-def _windll_getnode():
+def _windll_getnode() -> int | None:
     """Get the hardware address on Windows using the _uuid extension module."""
     if _UuidCreate:
         uuid_bytes = _UuidCreate()
         return UUID(bytes_le=uuid_bytes).node
+    return None
 
-def _random_getnode():
+def _random_getnode() -> int:
     """Get a random node ID."""
     # RFC 4122, $4.1.6 says "For systems with no IEEE address, a randomly or
     # pseudo-randomly generated value may be used; see Section 4.5.  The
@@ -647,7 +663,7 @@ else:
 
 _node = None
 
-def getnode():
+def getnode() -> int:
     """Get the hardware address as a 48-bit positive integer.
 
     The first time this runs, it may launch a separate program, which could
@@ -664,14 +680,14 @@ def getnode():
             _node = getter()
         except:
             continue
-        if (_node is not None) and (0 <= _node < (1 << 48)):
+        if (_node is not None) and isinstance(_node, int) and (0 <= _node < (1 << 48)):
             return _node
     assert False, '_random_getnode() returned invalid value: {}'.format(_node)
 
 
 _last_timestamp = None
 
-def uuid1(node=None, clock_seq=None):
+def uuid1(node: int | None = None, clock_seq: int | None = None) -> UUID | SafeUUID:
     """Generate a UUID from a host ID, sequence number, and the current time.
     If 'node' is not given, getnode() is used to obtain the hardware
     address.  If 'clock_seq' is given, it is used as the sequence number;
@@ -682,7 +698,7 @@ def uuid1(node=None, clock_seq=None):
     if _generate_time_safe is not None and node is clock_seq is None:
         uuid_time, safely_generated = _generate_time_safe()
         try:
-            is_safe = SafeUUID(safely_generated)
+            is_safe: SafeUUID = SafeUUID(safely_generated)
         except ValueError:
             is_safe = SafeUUID.unknown
         return UUID(bytes=uuid_time, is_safe=is_safe)
@@ -709,7 +725,7 @@ def uuid1(node=None, clock_seq=None):
     return UUID(fields=(time_low, time_mid, time_hi_version,
                         clock_seq_hi_variant, clock_seq_low, node), version=1)
 
-def uuid3(namespace, name):
+def uuid3(namespace: UUID, name: str) -> UUID:
     """Generate a UUID from the MD5 hash of a namespace UUID and a name."""
     from hashlib import md5
     digest = md5(
@@ -718,11 +734,11 @@ def uuid3(namespace, name):
     ).digest()
     return UUID(bytes=digest[:16], version=3)
 
-def uuid4():
+def uuid4() -> UUID:
     """Generate a random UUID."""
     return UUID(bytes=os.urandom(16), version=4)
 
-def uuid5(namespace, name):
+def uuid5(namespace: UUID, name: str) -> UUID:
     """Generate a UUID from the SHA-1 hash of a namespace UUID and a name."""
     from hashlib import sha1
     hash = sha1(namespace.bytes + bytes(name, "utf-8")).digest()
